@@ -1,7 +1,7 @@
-// /api/gsheet.js
+// /api/gsheet.js  (CommonJS)
 const GAS_URL = process.env.GAS_URL;
 
-export default async function handler(req, res) {
+module.exports = async function (req, res) {
   // CORS básico
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: 'Missing GAS_URL env var' });
   }
 
-  // Ping simple con GET
+  // Ping simple
   if (req.method === 'GET') {
     try {
       const ping = await fetch(GAS_URL);
@@ -39,4 +39,4 @@ export default async function handler(req, res) {
   } catch (e) {
     return res.status(500).json({ ok: false, error: String(e) });
   }
-}
+};
