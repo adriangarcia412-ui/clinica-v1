@@ -1,59 +1,63 @@
 // api/gsheet.js
 
-// Fuerza runtime Node (no Edge). También puedes omitir esta línea si quieres.
-export const config = { runtime: 'nodejs' };
+export const config = {
+  // Runtime estándar de Vercel (evita 'edge' o 'nodejs18.x')
+  runtime: 'nodejs',
+};
 
-const GAS_URL = process.env.GAS_URL;
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*'); // si quieres, pon tu dominio en lugar de '*'
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
 
 export default async function handler(req, res) {
-  // CORS básico (ajusta el origen si lo necesitas restringir)
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  setCors(res);
 
+  // Preflight CORS
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  if (!GAS_URL) {
-    return res.status(500).json({ ok: false, error: 'Falta la env GAS_URL en Vercel.' });
-  }
-
-  // Ping simple con GET para comprobar que el proxy está vivo
+  // GET: solo status, NO tocar GAS (así al abrir la URL en el navegador no rompe nada)
   if (req.method === 'GET') {
+    return res.status(200).json({ ok: true, message: 'proxy activo' });
+  }
+
+  // POST: proxy hacia tu Google Apps Script
+  if (req.method === 'POST') {
     try {
-      const r = await fetch(GAS_URL);
-      const txt = await r.text();
-      return res.status(200).json({ ok: true, message: 'proxy activo', raw: txt.slice(0, 150) });
-    } catch (e) {
-      return res.status(500).json({ ok: false, error: String(e) });
+      const GAS_URL = process.env.GAS_URL;
+      if (!GAS_URL) {
+        return res.status(500).json({ ok: false, error: 'Falta variable de entorno GAS_URL' });
+      }
+
+      // Si el front envía JSON, Vercel ya lo parsea en req.body
+      const payload = req.body ?? {};
+      const resp = await fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const text = await resp.text();
+      const ct = resp.headers.get('content-type') || '';
+
+      if (ct.includes('application/json')) {
+        const data = JSON.parse(text);
+        return res.status(resp.ok ? 200 : resp.status).json(data);
+      } else {
+        // Si tu GAS devuelve texto/HTML, lo regresamos como JSON para el front
+        return res
+          .status(resp.ok ? 200 : resp.status)
+          .json({ ok: resp.ok, data: text });
+      }
+    } catch (err) {
+      console.error('Error en proxy /api/gsheet:', err);
+      return res.status(500).json({ ok: false, error: String(err) });
     }
   }
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
-  }
-
-  try {
-    // En Next/Vercel, req.body ya viene parseado si Content-Type es application/json
-    const payload = req.body ?? {};
-
-    const r = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    // Intentamos JSON; si no, regresamos texto crudo
-    const contentType = r.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      const data = await r.json();
-      return res.status(r.ok ? 200 : r.status).json(data);
-    } else {
-      const txt = await r.text();
-      return res.status(r.ok ? 200 : r.status).json({ ok: r.ok, raw: txt });
-    }
-  } catch (e) {
-    return res.status(500).json({ ok: false, error: String(e) });
-  }
+  // Otros métodos no permitidos
+  return res.status(405).json({ ok: false, error: 'Only GET/POST allowed' });
 }
