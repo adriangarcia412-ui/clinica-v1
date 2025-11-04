@@ -1,14 +1,14 @@
-// api/gsheet.js
+// api/gsheet.js  — versión CommonJS compatible con Vercel Functions
 const GAS_URL = process.env.GAS_URL;
 
-// Permitir CORS básico (si luego lo necesitas)
+// CORS básico (opcional, útil para pruebas desde otras páginas)
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   cors(res);
 
   if (req.method === 'OPTIONS') {
@@ -26,32 +26,41 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     try {
-      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-      // Hacer 'action' opcional: por defecto 'append'
+      const body =
+        typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+
+      // Hacemos 'action' opcional (default = 'append')
       const action = body.action || 'append';
 
-      // Si mandan { action, data }, úsalo. Si mandan el objeto “plano”, lo tomamos como data.
+      // Si mandan {action, data} lo usamos; si mandan plano, lo tomamos como data
       const data = body.data ?? body;
 
-      // Evitar que reenvíes 'action' duplicado dentro de data si ya venía plano:
-      if (data.action) delete data.action;
+      // Evitar duplicar 'action' dentro de data
+      if (data && data.action) delete data.action;
 
-      const upstreamResp = await fetch(GAS_URL, {
+      const upstream = await fetch(GAS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, data }),
       });
 
-      const json = await upstreamResp.json().catch(() => ({}));
+      // Intentamos parsear JSON; si no, devolvemos el texto crudo
+      const raw = await upstream.text();
+      let out;
+      try { out = JSON.parse(raw); } catch { out = { ok: upstream.ok, raw }; }
 
-      return res.status(upstreamResp.ok ? 200 : upstreamResp.status).json(json);
+      return res
+        .status(upstream.ok ? 200 : upstream.status)
+        .json(out);
     } catch (err) {
-      return res.status(500).json({ ok: false, error: String(err?.message || err) });
+      return res
+        .status(500)
+        .json({ ok: false, error: String(err?.message || err) });
     }
   }
 
   return res.status(405).json({ ok: false, error: 'Method not allowed' });
-}
+};
 
-// ✅ Aseguramos runtime Node en Vercel (no Edge)
-export const runtime = 'nodejs';
+// Forzamos runtime Node (no Edge)
+module.exports.config = { runtime: 'nodejs' };
