@@ -1,23 +1,25 @@
-// Fuerza el runtime moderno (evita el error de "Function Runtimes must have a valid version")
-export const config = {
-  runtime: 'nodejs18.x',
-};
+// Fuerza Node.js 18 para esta función (sin vercel.json)
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
 
-// Leer la URL del Apps Script desde las variables de entorno en Vercel
 const GAS_URL = process.env.GAS_URL;
 
-export default async function handler(req, res) {
+async function handler(req, res) {
+  setCors(res);
+
   if (!GAS_URL) {
     return res.status(500).json({ ok: false, error: 'Missing GAS_URL in Vercel Environment Variables' });
   }
 
   // Preflight
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
 
-  // Ping simple (GET) para probar que el proxy está vivo
+  // Ping simple (GET) para probar el proxy
   if (req.method === 'GET') {
     try {
       const ping = await fetch(GAS_URL);
@@ -28,7 +30,6 @@ export default async function handler(req, res) {
     }
   }
 
-  // Solo aceptamos POST para pasar datos al GAS
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
@@ -39,9 +40,14 @@ export default async function handler(req, res) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req.body || {})
     });
+
     const text = await r.text();
     return res.status(r.ok ? 200 : 500).json({ ok: r.ok, raw: text });
   } catch (e) {
     return res.status(500).json({ ok: false, error: String(e) });
   }
 }
+
+// CommonJS (requerido aquí). Adjuntamos config al export.
+module.exports = handler;
+module.exports.config = { runtime: 'nodejs18.x' };
