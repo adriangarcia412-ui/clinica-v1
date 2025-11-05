@@ -1,90 +1,72 @@
-// api/gsheet.js
+// api/gsheet.js  (Vercel Serverless Function, Node 22, CommonJS)
+const GAS_URL = process.env.GAS_URL; // ya lo tienes configurado en Vercel
 
-// NOTA: NO declares runtime 'nodejs18.x'. Si tienes una línea como:
-// export const config = { runtime: 'nodejs18.x' }
-// elimínala, o cámbiala por: export const config = { runtime: 'nodejs' }
-// Aunque lo más seguro hoy es NO poner nada.
-
-module.exports = async (req, res) => {
-  // CORS básico
+// Pequeña ayuda para CORS desde el navegador
+function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 
+module.exports = async (req, res) => {
+  setCors(res);
+
+  // Preflight
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
-  const GAS_URL = process.env.GAS_URL;
   if (!GAS_URL) {
-    res.status(500).json({ ok: false, error: 'Missing GAS_URL env var in Vercel' });
+    res.status(500).json({ ok: false, error: 'GAS_URL no está definido en Vercel' });
     return;
   }
 
-  // Health check simple
-  if (req.method === 'GET') {
-    res.status(200).json({ ok: true, message: 'proxy ok' });
+  // Ping de salud
+  if (req.method === 'GET' && (req.query.ping || req.query.health || req.query.status)) {
+    res.status(200).json({ ok: true, message: 'proxy activo' });
     return;
   }
 
-  if (req.method !== 'POST') {
-    res.status(405).json({ ok: false, error: 'Method not allowed' });
-    return;
+  // Construir la URL final para Apps Script conservando los query params (si existen)
+  let forwardUrl = GAS_URL;
+  if (req.url.includes('?')) {
+    // /api/gsheet?loquesea -> añadimos ?loquesea al GAS_URL
+    forwardUrl += req.url.substring(req.url.indexOf('?'));
   }
 
-  // Normalizar body: puede llegar string o objeto
-  let body = {};
   try {
-    if (typeof req.body === 'string') {
-      body = JSON.parse(req.body);
-    } else if (req.body && typeof req.body === 'object') {
-      body = req.body;
-    } else {
-      // Vercel (node) puede no parsear; leemos manual con stream
-      const chunks = [];
-      for await (const chunk of req) chunks.push(chunk);
-      const raw = Buffer.concat(chunks).toString('utf8') || '{}';
-      body = JSON.parse(raw);
+    // Preparar opciones de fetch hacia Apps Script
+    const opts = { method: req.method, headers: {} };
+
+    if (req.method === 'POST') {
+      // Vercel parsea JSON automáticamente en req.body cuando viene con Content-Type: application/json
+      const isJson = req.headers['content-type'] && req.headers['content-type'].includes('application/json');
+      if (isJson) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(req.body || {});
+      } else {
+        // Si algún día envías otra cosa, la reenviamos como texto
+        const chunks = [];
+        for await (const chunk of req) chunks.push(chunk);
+        opts.body = Buffer.concat(chunks);
+      }
     }
-  } catch (e) {
-    return res.status(400).json({ ok: false, error: 'Invalid JSON body' });
-  }
 
-  const action = body.action;
-  if (!action) {
-    return res.status(400).json({ ok: false, error: 'Missing action' });
-  }
-  if (!['append', 'test'].includes(action)) {
-    return res.status(400).json({ ok: false, error: `Unknown action: ${action}` });
-  }
+    const r = await fetch(forwardUrl, opts);
+    const ct = r.headers.get('content-type') || '';
 
-  // Preparamos payload para GAS.
-  // Convención: si mandas { action:'append', data:{...} } lo reenviamos igual,
-  // y si mandas campos sueltos, los empaquetamos en data.
-  const payload = {
-    action,
-    data: body.data && typeof body.data === 'object' ? body.data : body
-  };
+    // Si Apps Script responde JSON, lo devolvemos como JSON
+    if (ct.includes('application/json')) {
+      const data = await r.json();
+      res.status(r.status).json(data);
+      return;
+    }
 
-  try {
-    const r = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
+    // Si responde texto/HTML (por ejemplo páginas de “Error” o autenticación), lo envolvemos
     const text = await r.text();
-    let json;
-    try {
-      json = JSON.parse(text);
-    } catch {
-      json = { raw: text }; // GAS devolvió HTML u otro formato
-    }
-
-    // Si GAS respondió OK (2xx), regresamos 200; si no, 500
-    res.status(r.ok ? 200 : 500).json({ ok: r.ok, ...json });
+    res.status(r.status).json({ ok: r.ok, message: 'proxy activo', raw: text });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message || String(err) });
+    res.status(502).json({ ok: false, error: 'Fallo al contactar Apps Script', details: String(err) });
   }
 };
