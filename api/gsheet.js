@@ -1,87 +1,90 @@
 // api/gsheet.js
 
-// Usa runtime de Node "normal" en Vercel (evita nodejs18.x / edge)
-export const config = { runtime: "nodejs" };
+// NOTA: NO declares runtime 'nodejs18.x'. Si tienes una línea como:
+// export const config = { runtime: 'nodejs18.x' }
+// elimínala, o cámbiala por: export const config = { runtime: 'nodejs' }
+// Aunque lo más seguro hoy es NO poner nada.
 
-function tryJson(text) {
-  try { return JSON.parse(text); } catch { return null; }
-}
+module.exports = async (req, res) => {
+  // CORS básico
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-export default async function handler(req, res) {
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
   const GAS_URL = process.env.GAS_URL;
   if (!GAS_URL) {
-    return res.status(500).json({ ok: false, error: "Falta variable de entorno GAS_URL en Vercel" });
+    res.status(500).json({ ok: false, error: 'Missing GAS_URL env var in Vercel' });
+    return;
   }
 
-  // GET = ping de salud (no toca datos)
-  if (req.method === "GET") {
-    try {
-      const up = await fetch(GAS_URL, { method: "GET" });
-      const raw = await up.text();
-      return res.status(200).json({
-        ok: true,
-        message: "proxy activo",
-        upstreamStatus: up.status,
-        raw
-      });
-    } catch (e) {
-      return res.status(502).json({ ok: false, error: "No se pudo contactar GAS_URL", detail: String(e) });
+  // Health check simple
+  if (req.method === 'GET') {
+    res.status(200).json({ ok: true, message: 'proxy ok' });
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ ok: false, error: 'Method not allowed' });
+    return;
+  }
+
+  // Normalizar body: puede llegar string o objeto
+  let body = {};
+  try {
+    if (typeof req.body === 'string') {
+      body = JSON.parse(req.body);
+    } else if (req.body && typeof req.body === 'object') {
+      body = req.body;
+    } else {
+      // Vercel (node) puede no parsear; leemos manual con stream
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const raw = Buffer.concat(chunks).toString('utf8') || '{}';
+      body = JSON.parse(raw);
     }
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: 'Invalid JSON body' });
   }
 
-  // POST = reenviar al Apps Script
-  if (req.method === "POST") {
+  const action = body.action;
+  if (!action) {
+    return res.status(400).json({ ok: false, error: 'Missing action' });
+  }
+  if (!['append', 'test'].includes(action)) {
+    return res.status(400).json({ ok: false, error: `Unknown action: ${action}` });
+  }
+
+  // Preparamos payload para GAS.
+  // Convención: si mandas { action:'append', data:{...} } lo reenviamos igual,
+  // y si mandas campos sueltos, los empaquetamos en data.
+  const payload = {
+    action,
+    data: body.data && typeof body.data === 'object' ? body.data : body
+  };
+
+  try {
+    const r = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const text = await r.text();
+    let json;
     try {
-      // Vercel parsea JSON automáticamente si viene con Content-Type correcto;
-      // por si acaso, soportamos ambas formas:
-      const incoming = typeof req.body === "object" && req.body !== null
-        ? req.body
-        : (await req.json?.()) || {};
-
-      // Normalizamos "action" pero NO la exigimos
-      const map = {
-        append: "append",
-        pendiente: "append",
-        save: "append",
-        guardar: "append",
-        close: "finalize",
-        cerrar: "finalize",
-        final: "finalize",
-        finalizar: "finalize",
-        finalize: "finalize"
-      };
-
-      const actionIncoming = (incoming.action || "append").toString().trim().toLowerCase();
-      const action = map[actionIncoming] || "append";
-
-      // Construimos el payload que verá tu Apps Script
-      const payload = {
-        action,
-        data: { ...incoming }
-      };
-      delete payload.data.action; // para no duplicar
-
-      const up = await fetch(GAS_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      const text = await up.text();
-      const maybeJson = tryJson(text);
-
-      // Si GAS respondió JSON, lo devolvemos tal cual; si no, regresamos texto crudo
-      return res.status(up.ok ? 200 : 502).json({
-        ok: up.ok,
-        upstreamStatus: up.status,
-        ...(maybeJson ?? { raw: text })
-      });
-    } catch (e) {
-      return res.status(500).json({ ok: false, error: "Fallo al proxy-post", detail: String(e) });
+      json = JSON.parse(text);
+    } catch {
+      json = { raw: text }; // GAS devolvió HTML u otro formato
     }
-  }
 
-  // Otros métodos no permitidos
-  res.setHeader("Allow", ["GET", "POST"]);
-  return res.status(405).json({ ok: false, error: "Method Not Allowed" });
-}
+    // Si GAS respondió OK (2xx), regresamos 200; si no, 500
+    res.status(r.ok ? 200 : 500).json({ ok: r.ok, ...json });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || String(err) });
+  }
+};
