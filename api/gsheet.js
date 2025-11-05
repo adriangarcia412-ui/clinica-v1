@@ -1,49 +1,47 @@
-// api/gsheet.js
-// Runtime Node.js 22.x (ya lo fijaste en package.json)
-// Requiere env: GAS_URL  => tu Web App de Google Apps Script (deployment "Anyone")
-
+// /api/gsheet.js
 export default async function handler(req, res) {
-  const { GAS_URL } = process.env;
-  if (!GAS_URL) {
-    return res.status(500).json({ ok: false, error: 'Missing GAS_URL env var' });
-  }
-
   try {
-    // Prueba rápida de salud
-    if (req.method === 'GET') {
-      const url = req.query.ping ? `${GAS_URL}?ping=1` : GAS_URL;
-      const r = await fetch(url, { method: 'GET' });
-      const raw = await r.text();
-      return res.status(200).json({ ok: true, message: 'proxy activo', raw });
+    const GAS_URL = process.env.GAS_URL; // p.ej. https://script.google.com/macros/s/AKfycb.../exec
+    if (!GAS_URL) return res.status(500).json({ ok: false, error: 'Missing GAS_URL env var' });
+
+    const method = req.method || 'GET';
+
+    const rawAction = (req.body && req.body.action) || req.query.action || '';
+    const action = String(rawAction).toLowerCase().trim();
+
+    // payload hacia GAS
+    const payload = {
+      action,
+      data: (req.body && req.body.data) ? req.body.data : (method === 'POST' ? req.body : {})
+    };
+
+    // Construye URL final (GET usa query, POST usa body)
+    const url = method === 'GET'
+      ? `${GAS_URL}?action=${encodeURIComponent(action)}`
+      : GAS_URL;
+
+    const fetchOpts = {
+      method,
+      headers: { 'Content-Type': 'application/json' }
+    };
+    if (method === 'POST') {
+      fetchOpts.body = JSON.stringify(payload);
     }
 
-    if (req.method === 'POST') {
-      // Asegurar action
-      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-      const action = body.action || 'append'; // default
-      const payload = { action, values: body.values || body };
+    const r = await fetch(url, fetchOpts);
+    const text = await r.text();
 
-      const r = await fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+    // Intenta parsear JSON, si no, devuelve crudo
+    let data;
+    try { data = JSON.parse(text); } catch { data = { raw: text }; }
 
-      const txt = await r.text();
-      // GAS puede devolver JSON o HTML de error; intentamos parsear
-      let data = null;
-      try { data = JSON.parse(txt); } catch { data = { raw: txt }; }
-
-      // Si GAS devolvió ok=false, mandamos 400
-      if (data && data.ok === false) {
-        return res.status(400).json(data);
-      }
-
-      return res.status(200).json({ ok: true, data });
+    // Respuesta amistosa para /api/gsheet?action=ping
+    if (action === 'ping') {
+      return res.status(200).json({ ok: true, message: 'proxy activo', ...(typeof data === 'object' ? data : { raw: text }) });
     }
 
-    return res.status(405).json({ ok: false, error: 'Method not allowed' });
+    return res.status(200).json(data);
   } catch (err) {
-    return res.status(500).json({ ok: false, error: String(err) });
+    return res.status(500).json({ ok: false, error: String(err && err.message ? err.message : err) });
   }
 }
