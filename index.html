@@ -1,18 +1,146 @@
 <!doctype html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Registro Clínico</title>
-    <meta name="description" content="App de Registro Clínico" />
-  </head>
-  <body>
-    <div id="app"></div>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Registro Clínico</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: #f7f7fb; }
+    header { padding: 16px 20px; background:#0b74de; color:#fff; font-weight:600; }
+    main { max-width: 1100px; margin: 24px auto 80px; padding: 0 16px; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 6px 18px rgba(0,0,0,.06); padding: 20px; }
+    .grid { display:grid; gap:14px; grid-template-columns: repeat(12, 1fr); }
+    .col-3 { grid-column: span 3; } .col-4 { grid-column: span 4; } .col-6 { grid-column: span 6; } .col-12 { grid-column: span 12; }
+    label { font-size: .9rem; color:#333; margin-bottom:6px; display:block; }
+    input, select, textarea {
+      width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #d8d8e0;
+      border-radius: 8px; background:#fff; font-size: .95rem;
+    }
+    textarea { min-height: 64px; resize: vertical; }
+    .actions { display:flex; gap:12px; margin-top: 16px; }
+    .btn {
+      border: 0; padding: 12px 16px; border-radius: 10px; font-weight:600; cursor:pointer;
+      background:#0b74de; color:#fff;
+    }
+    .btn.secondary { background:#eef2f7; color:#0b1b2b; border:1px solid #d8d8e0; }
+    .muted { color:#6b7280; font-size:.9rem; }
+  </style>
+</head>
+<body>
+  <header>Registro Clínico</header>
 
-    <!-- Tu app (igual que antes) -->
-    <script type="module" src="/src/main.js"></script>
+  <main>
+    <div class="card">
+      <div class="muted" id="version">v1 (HTML + Bridge)</div>
 
-    <!-- Bridge: conecta los botones con /api/gsheet -->
-    <script defer src="/clinica-bridge.js"></script>
-  </body>
+      <div class="grid" style="margin-top:12px;">
+        <div class="col-3">
+          <label for="input-id">ID</label>
+          <input id="input-id" type="text" placeholder="ID (si aplica)" />
+        </div>
+        <div class="col-4">
+          <label for="input-fecha">Fecha/Hora ISO</label>
+          <input id="input-fecha" type="text" placeholder="YYYY-MM-DDTHH:mm:ssZ" />
+        </div>
+        <div class="col-5">
+          <label for="input-nombre">Nombre</label>
+          <input id="input-nombre" type="text" placeholder="Nombre completo" />
+        </div>
+
+        <div class="col-4">
+          <label for="input-nomina">Número de nómina</label>
+          <input id="input-nomina" type="text" placeholder="Ej. 12345" />
+        </div>
+        <div class="col-4">
+          <label for="input-edad">Edad</label>
+          <input id="input-edad" type="text" placeholder="Ej. 28" />
+        </div>
+        <div class="col-4">
+          <label for="select-sexo">Sexo</label>
+          <select id="select-sexo">
+            <option value="">—</option>
+            <option value="M">M</option>
+            <option value="F">F</option>
+          </select>
+        </div>
+
+        <div class="col-6">
+          <label for="input-area-laboral">Área laboral</label>
+          <input id="input-area-laboral" type="text" />
+        </div>
+        <div class="col-6">
+          <label for="input-area-incidente">Área del incidente</label>
+          <input id="input-area-incidente" type="text" />
+        </div>
+
+        <div class="col-6">
+          <label for="input-puesto">Puesto</label>
+          <input id="input-puesto" type="text" />
+        </div>
+        <div class="col-6">
+          <label for="input-zona">Zona del cuerpo afectada</label>
+          <input id="input-zona" type="text" />
+        </div>
+
+        <div class="col-6">
+          <label for="input-diagnostico">Diagnóstico</label>
+          <input id="input-diagnostico" type="text" />
+        </div>
+        <div class="col-6">
+          <label for="input-exploracion">Exploración</label>
+          <input id="input-exploracion" type="text" />
+        </div>
+
+        <div class="col-6">
+          <label for="input-motivo">Motivo</label>
+          <input id="input-motivo" type="text" />
+        </div>
+        <div class="col-6">
+          <label for="input-antecedentes">Antecedentes</label>
+          <input id="input-antecedentes" type="text" />
+        </div>
+
+        <div class="col-4">
+          <label for="input-hemisferio">Hemisferio</label>
+          <input id="input-hemisferio" type="text" />
+        </div>
+        <div class="col-4">
+          <label for="input-clasificacion">Clasificación del accidente</label>
+          <input id="input-clasificacion" type="text" />
+        </div>
+        <div class="col-4">
+          <label for="input-seguimiento">Seguimiento (cita)</label>
+          <input id="input-seguimiento" type="text" placeholder="dd/mm/aaaa" />
+        </div>
+
+        <div class="col-12">
+          <label for="input-indicaciones">Indicaciones/Tratamiento</label>
+          <textarea id="input-indicaciones" placeholder=""></textarea>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn secondary">Guardar (Pendiente)</button>
+        <button class="btn">Cerrar caso</button>
+      </div>
+
+      <p class="muted" style="margin-top:10px;">
+        Estado del backend:
+        <a href="/api/gsheet?action=ping" target="_blank" rel="noopener">/api/gsheet?action=ping</a>
+      </p>
+    </div>
+  </main>
+
+  <!-- Auto-llenar fecha ISO si está vacío -->
+  <script>
+    (function () {
+      const f = document.getElementById('input-fecha');
+      if (f && !f.value) f.value = new Date().toISOString();
+    })();
+  </script>
+
+  <!-- Tu bridge (ya está publicado y funcionando) -->
+  <script src="/clinica-bridge.js"></script>
+</body>
 </html>
