@@ -1,49 +1,67 @@
-// pages/api/gsheet.js
-// Proxy hacia tu Apps Script Web App usando la variable de entorno GAS_URL.
-// Soporta GET (ping, list, etc.) y POST (clinica_save_pending, clinica_close).
+export const config = {
+  runtime: 'edge',
+};
 
-export default async function handler(req, res) {
-  const GAS_URL = process.env.GAS_URL;
-  if (!GAS_URL) {
-    return res.status(500).json({ ok: false, error: 'GAS_URL no está configurada en Vercel' });
+const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL
+  || 'https://script.google.com/macros/s/AKfycby5HPdVF5BzCHQxLbgckoeJVMcVDq9Kkc1819qW9Yxr1BxY__LcqmiQfeO8ZdDcjebmgQ/exec';
+
+function mkRes(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+async function forwardGet(action, searchParams) {
+  // Reenvía GET => GAS (ej. ?action=clinica_list_pending)
+  const url = new URL(APPS_SCRIPT_URL);
+  url.searchParams.set('action', action);
+  for (const [k, v] of searchParams.entries()) {
+    if (k !== 'action') url.searchParams.set(k, v);
   }
+  const res = await fetch(url.toString(), { method: 'GET' });
+  const data = await res.json().catch(() => ({}));
+  return mkRes(data, res.status);
+}
 
+async function forwardPost(action, body) {
+  // Reenvía POST JSON => GAS (ej. {action:"clinica_send_pending", data:{...}})
+  const res = await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...(body || {}) }),
+  });
+  const data = await res.json().catch(() => ({}));
+  return mkRes(data, res.status);
+}
+
+export default async function handler(req) {
   try {
-    if (req.method === 'GET') {
-      const qs = new URLSearchParams(req.query).toString();
-      const url = GAS_URL + (GAS_URL.includes('?') ? '&' : '?') + qs;
-      const r = await fetch(url, { method: 'GET' });
-      const text = await r.text();
+    const { searchParams } = new URL(req.url);
+    const method = req.method || 'GET';
 
-      let parsed;
-      try { parsed = JSON.parse(text); } catch (_) { parsed = null; }
-
-      if (parsed && typeof parsed === 'object') {
-        // Respuesta JSON del GAS
-        return res.status(200).json(parsed);
-      } else {
-        // Respuesta no-JSON (por ejemplo HTML de error). No fallamos, solo devolvemos raw.
-        return res.status(200).json({ ok: true, message: 'proxy activo', raw: text });
-      }
+    // 1) Ping simple
+    if (method === 'GET' && searchParams.get('action') === 'ping') {
+      return mkRes({ ok: true, message: 'pong (GAS activo)' });
     }
 
-    if (req.method === 'POST') {
-      const body = req.body || {};
-      const r = await fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      const text = await r.text();
-      let parsed;
-      try { parsed = JSON.parse(text); } catch (_) { parsed = { ok: false, error: 'Respuesta no-JSON del GAS', raw: text }; }
-      return res.status(200).json(parsed);
+    // 2) Acciones GET que listan/consultan
+    if (method === 'GET') {
+      const action = searchParams.get('action');
+      if (action) return await forwardGet(action, searchParams);
+      return mkRes({ ok: false, error: 'Missing action' }, 400);
     }
 
-    res.setHeader('Allow', ['GET', 'POST']);
-    return res.status(405).json({ ok: false, error: 'Method not allowed' });
-  } catch (e) {
-    return res.status(500).json({ ok: false, error: String(e) });
+    // 3) Acciones POST (guardar/reenviar/eliminar/cerrar)
+    if (method === 'POST') {
+      const body = await req.json().catch(() => ({}));
+      const action = body?.action || searchParams.get('action');
+      if (!action) return mkRes({ ok: false, error: 'Missing action' }, 400);
+      return await forwardPost(action, body);
+    }
+
+    return mkRes({ ok: false, error: 'Method not allowed' }, 405);
+  } catch (err) {
+    return mkRes({ ok: false, error: String(err?.message || err) }, 500);
   }
 }
