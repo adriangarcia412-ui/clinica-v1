@@ -1,235 +1,208 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Registro Clínico</title>
-  <link rel="icon" href="data:," />
-  <style>
-    body {
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
-      margin: 0;
-      background: #f8fafc;
-      color: #0f172a;
-    }
-    header {
-      background: #0ea5e9;
-      color: white;
-      padding: 14px 20px;
-      font-size: 18px;
-      font-weight: 600;
-    }
-    main {
-      padding: 20px;
-      max-width: 1000px;
-      margin: auto;
-      background: white;
-      border-radius: 8px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-    }
-    label { display:block; margin-top:10px; font-weight:500; }
-    input, select, textarea {
-      width: 100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px;
-    }
-    button {
-      background: #0ea5e9; border: none; color: white;
-      padding: 10px 14px; border-radius: 6px; margin-top: 12px;
-      cursor: pointer;
-    }
-    button:hover { background: #0284c7; }
-    footer {
-      text-align: center; padding: 20px; color: #64748b; font-size: 14px;
-    }
-    table { width:100%; border-collapse: collapse; }
-    th, td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
-    th { background: #f1f5f9; }
-  </style>
-</head>
+<!-- ============== CASOS EN LA NUBE (PENDIENTES) – BLOQUE COMPLETO ============== -->
+<section id="clinica-cloud-root" style="margin:48px 0 64px">
+  <h2 style="font-size:28px; font-weight:800; margin:0 0 8px">Casos en la nube (pendientes)</h2>
+  <p id="clinica-cloud-empty" style="margin:0 0 16px; color:#6b7280">No hay pendientes en la nube.</p>
 
-<body>
-  <header>Registro Clínico</header>
+  <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px">
+    <button id="clinica-cloud-refresh" type="button"
+            style="background:#0ea5e9; color:white; border:0; padding:10px 14px; border-radius:10px; cursor:pointer">
+      Actualizar lista
+    </button>
+    <span id="clinica-cloud-status" style="font-size:13px; color:#6b7280"></span>
+  </div>
 
-  <main>
-    <!-- ===================================================== -->
-    <!-- TU FORMULARIO EXISTENTE (no lo toques, ejemplo abajo) -->
-    <!-- ===================================================== -->
-    <form id="clinica-form">
-      <label>ID</label>
-      <input id="input-id" placeholder="ID del caso" />
+  <div style="overflow:auto; border:1px solid #e5e7eb; border-radius:10px">
+    <table id="clinica-cloud-table" style="width:100%; border-collapse:collapse; min-width:920px">
+      <thead style="background:#f8fafc">
+        <tr>
+          <th style="text-align:left; padding:10px 12px; border-bottom:1px solid #e5e7eb">ID</th>
+          <th style="text-align:left; padding:10px 12px; border-bottom:1px solid #e5e7eb">Fecha</th>
+          <th style="text-align:left; padding:10px 12px; border-bottom:1px solid #e5e7eb">Hora</th>
+          <th style="text-align:left; padding:10px 12px; border-bottom:1px solid #e5e7eb">Nombre</th>
+          <th style="text-align:left; padding:10px 12px; border-bottom:1px solid #e5e7eb"># Nómina</th>
+          <th style="text-align:left; padding:10px 12px; border-bottom:1px solid #e5e7eb">Área</th>
+          <th style="text-align:left; padding:10px 12px; border-bottom:1px solid #e5e7eb">Puesto</th>
+          <th style="text-align:left; padding:10px 12px; border-bottom:1px solid #e5e7eb">Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="clinica-cloud-tbody"></tbody>
+    </table>
+  </div>
+</section>
 
-      <label>Nombre</label>
-      <input id="input-nombre" placeholder="Nombre del paciente" />
+<script>
+(() => {
+  // ====================== CONFIG ======================
+  const API = '/api/gsheet'; // tu endpoint actual
 
-      <label>Número de nómina</label>
-      <input id="input-nomina" placeholder="12345" />
+  // IDs de campos actuales del formulario (ajusta si alguno difiere)
+  const FIELDS = {
+    id:                 'input-id',
+    fecha_iso:          'input-fecha',
+    nombre:             'input-nombre',
+    numero_nomina:      'input-nomina',
+    edad:               'input-edad',
+    sexo:               'select-sexo',
+    area_laboral:       'input-area-laboral',
+    area_incidente:     'input-area-incidente',
+    puesto:             'input-puesto',
+    zona_cuerpo:        'input-zona',
+    diagnostico:        'input-diagnostico',
+    exploracion:        'input-exploracion',
+    motivo:             'input-motivo',
+    antecedentes:       'input-antecedentes',
+    hemisferio:         'input-hemisferio',
+    clasificacion:      'input-clasificacion',
+    indicaciones:       'input-indicaciones',
+    seguimiento:        'input-seguimiento'
+  };
 
-      <label>Área laboral</label>
-      <input id="input-area-laboral" placeholder="Área" />
+  // ================ Utilidades =================
+  async function postJSON(action, data = {}) {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ action, data })
+    });
+    let out;
+    try { out = await res.json(); } catch(e) { out = { ok:false, error:'Respuesta inválida' }; }
+    if (!out || out.ok === false) throw new Error(out?.error || 'Error desconocido');
+    return out;
+  }
 
-      <label>Diagnóstico</label>
-      <textarea id="input-diagnostico" rows="3" placeholder="Escribe diagnóstico..."></textarea>
+  const $ = (id) => document.getElementById(id);
+  const setStatus = (m) => { const el = $('clinica-cloud-status'); if (el) el.textContent = m || ''; };
 
-      <div style="margin-top:14px;">
-        <button type="button">Guardar (Pendiente)</button>
-        <button type="button">Cerrar caso</button>
-      </div>
-    </form>
+  function getValue(id){ const el = $(id); return el ? String(el.value ?? '').trim() : ''; }
+  function setValue(id, v){
+    const el = $(id); if (!el) return;
+    if (el.tagName === 'SELECT') { el.value = v ?? ''; el.dispatchEvent(new Event('change')); }
+    else { el.value = v ?? ''; el.dispatchEvent(new Event('input')); }
+  }
 
-    <!-- ===================================================== -->
-    <!-- SECCIÓN NUEVA: Casos en la nube (pendientes) -->
-    <!-- ===================================================== -->
-    <section id="nube" style="margin-top:32px">
-      <h2 style="margin:0 0 12px 0;">Casos en la nube (pendientes)</h2>
-      <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
-        <button id="btn-refresh-nube" type="button">Actualizar lista</button>
-        <span id="nube-status" style="font-size:0.95rem; color:#666;"></span>
-      </div>
+  function collectForm() {
+    if (typeof window.clinicaFormData === 'function') return window.clinicaFormData();
+    return {
+      id:                getValue(FIELDS.id),
+      fecha_iso:         getValue(FIELDS.fecha_iso),
+      nombre:            getValue(FIELDS.nombre),
+      numero_nomina:     getValue(FIELDS.numero_nomina),
+      edad:              getValue(FIELDS.edad),
+      sexo:              getValue(FIELDS.sexo),
+      area_laboral:      getValue(FIELDS.area_laboral),
+      area_incidente:    getValue(FIELDS.area_incidente),
+      puesto:            getValue(FIELDS.puesto),
+      zona_cuerpo:       getValue(FIELDS.zona_cuerpo),
+      diagnostico:       getValue(FIELDS.diagnostico),
+      exploracion:       getValue(FIELDS.exploracion),
+      motivo:            getValue(FIELDS.motivo),
+      antecedentes:      getValue(FIELDS.antecedentes),
+      hemisferio:        getValue(FIELDS.hemisferio),
+      clasificacion:     getValue(FIELDS.clasificacion),
+      indicaciones:      getValue(FIELDS.indicaciones),
+      seguimiento:       getValue(FIELDS.seguimiento)
+    };
+  }
 
-      <div id="nube-empty" style="display:none; color:#666;">
-        No hay pendientes en la nube.
-      </div>
+  function fillForm(data = {}) {
+    if (typeof window.clinicaFillForm === 'function') { window.clinicaFillForm(data); return; }
+    setValue(FIELDS.id,             data.id);
+    setValue(FIELDS.fecha_iso,      data.fecha_iso);
+    setValue(FIELDS.nombre,         data.nombre);
+    setValue(FIELDS.numero_nomina,  data.numero_nomina);
+    setValue(FIELDS.edad,           data.edad);
+    setValue(FIELDS.sexo,           data.sexo);
+    setValue(FIELDS.area_laboral,   data.area_laboral);
+    setValue(FIELDS.area_incidente, data.area_incidente);
+    setValue(FIELDS.puesto,         data.puesto);
+    setValue(FIELDS.zona_cuerpo,    data.zona_cuerpo);
+    setValue(FIELDS.diagnostico,    data.diagnostico);
+    setValue(FIELDS.exploracion,    data.exploracion);
+    setValue(FIELDS.motivo,         data.motivo);
+    setValue(FIELDS.antecedentes,   data.antecedentes);
+    setValue(FIELDS.hemisferio,     data.hemisferio);
+    setValue(FIELDS.clasificacion,  data.clasificacion);
+    setValue(FIELDS.indicaciones,   data.indicaciones);
+    setValue(FIELDS.seguimiento,    data.seguimiento);
+  }
 
-      <div id="nube-list" style="display:none;">
-        <!-- La tabla se genera dinámicamente -->
-      </div>
-    </section>
-    <!-- ===================================================== -->
-  </main>
+  // ================ Render tabla =================
+  function renderTable(items = []) {
+    const tbody = $('clinica-cloud-tbody');
+    const empty = $('clinica-cloud-empty');
+    if (!tbody) return;
 
-  <footer>© 2025 Clínica | EHS System</footer>
+    tbody.innerHTML = '';
+    if (!items.length) { if (empty) empty.style.display = 'block'; return; }
+    if (empty) empty.style.display = 'none';
 
-  <!-- ===================================================== -->
-  <!-- SCRIPT PRINCIPAL DEL PUENTE -->
-  <!-- ===================================================== -->
-  <script src="/clinica-bridge.js"></script>
+    for (const it of items) {
+      const tr = document.createElement('tr');
+      const td = (t) => { const c = document.createElement('td'); c.style.padding='10px 12px'; c.style.borderBottom='1px solid #e5e7eb'; c.textContent = t ?? ''; return c; };
 
-  <!-- ===================================================== -->
-  <!-- SCRIPT NUEVO: Manejo de "Casos en la nube" -->
-  <!-- ===================================================== -->
-  <script>
-  (() => {
-    const API = '/api/gsheet';
+      tr.appendChild(td(it.id));
+      tr.appendChild(td(it.fecha || ''));
+      tr.appendChild(td(it.hora || ''));
+      tr.appendChild(td(it.nombre || ''));
+      tr.appendChild(td(it.numero_nomina || ''));
+      tr.appendChild(td(it.area_laboral || ''));
+      tr.appendChild(td(it.puesto || ''));
 
-    function qs(sel) { return document.querySelector(sel); }
-    function qsa(sel) { return Array.from(document.querySelectorAll(sel)); }
+      const actions = document.createElement('td');
+      actions.style.padding='10px 12px';
+      actions.style.borderBottom='1px solid #e5e7eb';
+      actions.style.whiteSpace='nowrap';
+      actions.style.display='flex';
+      actions.style.gap='8px';
 
-    async function apiGet(action, params = {}) {
-      const url = new URL(API, location.origin);
-      url.searchParams.set('action', action);
-      for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-      const res = await fetch(url.toString(), { method: 'GET' });
-      return res.json();
-    }
+      const bLoad = document.createElement('button');
+      bLoad.textContent = 'Cargar en formulario';
+      bLoad.type='button';
+      bLoad.style.cssText='background:#64748b;color:#fff;border:0;padding:8px 10px;border-radius:8px;cursor:pointer';
+      bLoad.addEventListener('click', () => fillForm(it));
 
-    async function apiPost(action, data = {}) {
-      const res = await fetch(API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, data }),
-      });
-      return res.json();
-    }
-
-    function setStatus(text) { qs('#nube-status').textContent = text || ''; }
-
-    function renderList(items) {
-      const empty = qs('#nube-empty');
-      const list  = qs('#nube-list');
-
-      if (!items || !items.length) {
-        empty.style.display = 'block';
-        list.style.display  = 'none';
-        list.innerHTML = '';
-        return;
-      }
-
-      empty.style.display = 'none';
-      list.style.display  = 'block';
-
-      const rows = items.map((it, i) => {
-        const id     = it.id || it.rowId || it.key || `row-${i+1}`;
-        const fecha  = it.fecha || it.ts || it.ts_inicial || '';
-        const nombre = it.nombre || it.employee || it.paciente || '';
-        return `
-          <tr>
-            <td style="white-space:nowrap">${id}</td>
-            <td>${fecha}</td>
-            <td>${nombre}</td>
-            <td style="text-align:right">
-              <button class="btn-send" data-id="${id}">Enviar ahora</button>
-              <button class="btn-del" data-id="${id}" style="margin-left:6px">Eliminar</button>
-            </td>
-          </tr>`;
-      }).join('');
-
-      list.innerHTML = `
-        <div style="overflow:auto; border:1px solid #e5e7eb; border-radius:8px">
-          <table style="width:100%; border-collapse:collapse; font-size:0.95rem">
-            <thead style="background:#f8fafc">
-              <tr>
-                <th style="text-align:left; padding:8px 10px;">ID</th>
-                <th style="text-align:left; padding:8px 10px;">Fecha</th>
-                <th style="text-align:left; padding:8px 10px;">Nombre</th>
-                <th style="text-align:right; padding:8px 10px;">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-      `;
-
-      // Acciones
-      qsa('#nube-list .btn-send').forEach(b => {
-        b.addEventListener('click', async () => {
-          const id = b.getAttribute('data-id');
-          setStatus('Enviando…');
-          try {
-            const r = await apiPost('clinica_send_pending', { id });
-            if (!r.ok) throw new Error(r.error || 'Error al enviar');
-            setStatus('Enviado ✔');
-            await refresh();
-          } catch (e) {
-            alert('No se pudo enviar: ' + e.message);
-            setStatus('');
-          }
-        });
+      const bClose = document.createElement('button');
+      bClose.textContent = 'Enviar y cerrar';
+      bClose.type='button';
+      bClose.style.cssText='background:#10b981;color:#fff;border:0;padding:8px 10px;border-radius:8px;cursor:pointer';
+      bClose.addEventListener('click', async () => {
+        try {
+          setStatus('Enviando caso...');
+          const out = await postJSON('clinica_close', it);
+          alert(`Caso cerrado: ${out.id || it.id || 'OK'}`);
+          await refresh();
+        } catch (err) {
+          alert(`Error al cerrar: ${err.message}`);
+        } finally { setStatus(''); }
       });
 
-      qsa('#nube-list .btn-del').forEach(b => {
-        b.addEventListener('click', async () => {
-          const id = b.getAttribute('data-id');
-          if (!confirm(`¿Eliminar pendiente ${id}?`)) return;
-          setStatus('Eliminando…');
-          try {
-            const r = await apiPost('clinica_delete_pending', { id });
-            if (!r.ok) throw new Error(r.error || 'Error al eliminar');
-            setStatus('Eliminado ✔');
-            await refresh();
-          } catch (e) {
-            alert('No se pudo eliminar: ' + e.message);
-            setStatus('');
-          }
-        });
-      });
+      actions.appendChild(bLoad);
+      actions.appendChild(bClose);
+      tr.appendChild(actions);
+      tbody.appendChild(tr);
     }
+  }
 
-    async function refresh() {
-      try {
-        setStatus('Cargando…');
-        const r = await apiGet('clinica_list_pending');
-        if (!r.ok) throw new Error(r.error || 'Respuesta inválida');
-        renderList(r.items || []);
-        setStatus('');
-      } catch (e) {
-        renderList([]);
-        setStatus('No se pudo listar');
-        console.error(e);
-      }
+  // ================ Carga de pendientes =================
+  async function refresh() {
+    try {
+      setStatus('Consultando pendientes...');
+      // Asegúrate que tu backend tenga esta acción.
+      const out = await postJSON('clinica_list_pending', {});
+      renderTable(out.items || out.rows || []);
+    } catch (err) {
+      console.warn(err);
+      renderTable([]);
+    } finally {
+      setStatus('');
     }
+  }
 
-    qs('#btn-refresh-nube')?.addEventListener('click', refresh);
-    document.addEventListener('DOMContentLoaded', refresh);
-  })();
-  </script>
-</body>
-</html>
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = $('clinica-cloud-refresh');
+    if (btn) btn.addEventListener('click', refresh);
+    refresh();
+  });
+})();
+</script>
+<!-- ============ FIN CASOS EN LA NUBE (PENDIENTES) – BLOQUE COMPLETO ============ -->
