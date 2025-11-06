@@ -12,9 +12,9 @@
     .badge{display:inline-block;background:#e2f2fd;color:#075985;border:1px solid #bae6fd;padding:2px 8px;border-radius:999px;font-size:12px;margin-left:8px}
     .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--gap)}
     .col-6{grid-column:span 6}
+    .col-5{grid-column:span 5}
     .col-4{grid-column:span 4}
     .col-3{grid-column:span 3}
-    .col-5{grid-column:span 5}
     .col-12{grid-column:span 12}
     label{display:block;font-size:13px;color:#334155;margin-bottom:6px}
     input,select,textarea{
@@ -23,26 +23,26 @@
     }
     textarea{min-height:80px;resize:vertical}
     input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px #bae6fd}
-    .actions{display:flex;gap:var(--gap);margin-top:18px}
+    .actions{display:flex;gap:var(--gap);margin-top:18px;flex-wrap:wrap}
     .btn{border:none;border-radius:12px;padding:12px 18px;font-weight:600;cursor:pointer}
     .btn-primary{background:var(--accent);color:#fff}
     .btn-secondary{background:#e2e8f0;color:#0f172a}
     .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px}
-    /* Estilos de la sección “Casos en la nube” */
-    .cloud-header{display:flex;gap:12px;align-items:center;justify-content:flex-start;margin-bottom:12px;flex-wrap:wrap}
-    .cloud-list{display:flex;flex-direction:column;gap:10px}
-    .cloud-item{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fff;display:flex;justify-content:space-between;gap:16px;align-items:center}
-    .cloud-meta{font-size:13px;color:#334155}
-    .cloud-actions{display:flex;gap:8px}
-    .btn-danger{background:#ef4444;color:#fff}
-    .muted{color:#64748b;font-size:14px}
+    /* Casos en la nube */
+    .cloud-head{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+    .table{width:100%;border-collapse:collapse;margin-top:12px}
+    .table th,.table td{border-bottom:1px solid #e2e8f0;padding:10px;font-size:14px;text-align:left}
+    .muted{color:#64748b}
+    .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#e2f2fd;color:#075985;border:1px solid #bae6fd;font-size:12px}
+    .btn-danger{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+    .btn-ghost{background:#f1f5f9;color:#0f172a}
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Registro Clínico <span class="badge">v1</span></h1>
 
-    <!-- === TU FORMULARIO (INTACTO) === -->
+    <!-- FORMULARIO (sin cambios) -->
     <div class="card">
       <div class="grid">
         <div class="col-3">
@@ -140,152 +140,188 @@
         </div>
 
         <div class="col-12 actions">
-          <!-- NO CAMBIO los textos; clinica-bridge.js los engancha por texto -->
-          <button class="btn btn-secondary">Guardar (Pendiente)</button>
-          <button class="btn btn-primary">Cerrar caso → hoja “Clínica”</button>
+          <button id="btn-guardar-pend" class="btn btn-secondary">Guardar (Pendiente)</button>
+          <button id="btn-cerrar-caso" class="btn btn-primary">Cerrar caso → hoja “Clínica”</button>
+          <!-- NUEVO botón explícito, mismo efecto que Guardar (Pendiente) -->
+          <button id="btn-guardar-nube" class="btn btn-ghost">Guardar en la nube</button>
         </div>
       </div>
     </div>
 
-    <!-- === BLOQUE NUEVO: Casos en la nube (pendientes) === -->
-    <div class="card" style="margin-top:18px">
-      <div class="cloud-header">
-        <h2 style="margin:0">Casos en la nube (pendientes) / 云端待处理案例</h2>
+    <!-- CASOS EN LA NUBE (pendientes) -->
+    <div class="card" style="margin-top:20px">
+      <div class="cloud-head">
+        <h2 style="margin:0">Casos en la nube (pendientes) <span class="pill">Nube temporal</span></h2>
+        <div style="display:flex;gap:10px">
+          <button id="btn-refresh" class="btn btn-primary">Actualizar lista</button>
+        </div>
       </div>
-
-      <div class="actions" style="margin-top:8px">
-        <button id="btn-cloud-save" class="btn btn-primary">Guardar en la nube / 云端保存</button>
-        <button id="btn-cloud-refresh" class="btn btn-secondary">Actualizar lista / 刷新列表</button>
-      </div>
-
-      <div id="cloud-list" class="cloud-list" style="margin-top:12px">
-        <div class="muted">No hay pendientes en la nube. / 云端暂无待处理记录。</div>
-      </div>
+      <div id="cloud-empty" class="muted" style="margin-top:10px">No hay pendientes en la nube.</div>
+      <table id="cloud-table" class="table" style="display:none">
+        <thead>
+          <tr>
+            <th style="width:140px">ID</th>
+            <th>Nombre</th>
+            <th style="width:180px">Fecha</th>
+            <th style="width:220px">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="cloud-tbody"></tbody>
+      </table>
     </div>
   </div>
 
-  <!-- Bridge que ya tienes desplegado -->
+  <!-- Bridge existente: engancha Guardar (Pendiente) / Cerrar caso -->
   <script src="/clinica-bridge.js"></script>
 
-  <!-- JS de la sección “Casos en la nube” (no afecta tu operación actual) -->
+  <!-- MÓDULO EN PÁGINA: reusa el mismo backend con las 3 acciones válidas -->
   <script>
-    (function () {
-      const API = '/api/gsheet';
+    // Punto único de API (mismo que usa el bridge)
+    const API = '/api/gsheet';
 
-      async function postJSON(action, data) {
-        const res = await fetch(API, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action, data })
-        });
-        const j = await res.json();
-        if (!j.ok) throw new Error(j.error || 'Error desconocido');
-        return j;
-      }
-
-      // Exponemos una forma única de leer el formulario para reutilizarla
-      // Tanto el bridge como este bloque pueden usar window.clinicaFormData()
-      window.clinicaFormData = function () {
-        const v = id => document.getElementById(id)?.value?.trim() || '';
-        return {
-          id: v('input-id'),
-          fecha_iso: v('input-fecha') || new Date().toISOString(),
-          nombre: v('input-nombre'),
-          numero_nomina: v('input-nomina'),
-          edad: v('input-edad'),
-          sexo: document.getElementById('select-sexo')?.value || '',
-          puesto: v('input-puesto'),
-          area_laboral: v('input-area-laboral'),
-          area_incidente: v('input-area-incidente'),
-          zona_cuerpo: v('input-zona'),
-          hemisferio: v('input-hemisferio'),
-          diagnostico: v('input-diagnostico'),
-          exploracion: v('input-exploracion'),
-          motivo: v('input-motivo'),
-          antecedentes: v('input-antecedentes'),
-          clasificacion: v('input-clasificacion'),
-          seguimiento: v('input-seguimiento'),
-          indicaciones: v('input-indicaciones')
-        };
+    // 1) Un colector común para tu formulario
+    //    El bridge lo detecta si existe window.clinicaFormData()
+    window.clinicaFormData = function() {
+      const g = id => document.getElementById(id);
+      return {
+        id: g('input-id')?.value?.trim() || '',
+        fecha_iso: g('input-fecha')?.value?.trim() || new Date().toISOString(),
+        nombre: g('input-nombre')?.value?.trim() || '',
+        numero_nomina: g('input-nomina')?.value?.trim() || '',
+        edad: g('input-edad')?.value?.trim() || '',
+        sexo: g('select-sexo')?.value || '',
+        puesto: g('input-puesto')?.value?.trim() || '',
+        area_laboral: g('input-area-laboral')?.value?.trim() || '',
+        area_incidente: g('input-area-incidente')?.value?.trim() || '',
+        zona_cuerpo: g('input-zona')?.value?.trim() || '',
+        diagnostico: g('input-diagnostico')?.value?.trim() || '',
+        exploracion: g('input-exploracion')?.value?.trim() || '',
+        motivo: g('input-motivo')?.value?.trim() || '',
+        antecedentes: g('input-antecedentes')?.value?.trim() || '',
+        hemisferio: g('input-hemisferio')?.value?.trim() || '',
+        clasificacion: g('input-clasificacion')?.value?.trim() || '',
+        seguimiento: g('input-seguimiento')?.value?.trim() || '',
+        indicaciones: g('input-indicaciones')?.value?.trim() || ''
       };
+    };
 
-      // UI helpers
-      const $list = document.getElementById('cloud-list');
-      const $btnSave = document.getElementById('btn-cloud-save');
-      const $btnRefresh = document.getElementById('btn-cloud-refresh');
-
-      function renderEmpty() {
-        $list.innerHTML = '<div class="muted">No hay pendientes en la nube. / 云端暂无待处理记录。</div>';
-      }
-
-      function renderRows(rows) {
-        if (!rows || !rows.length) return renderEmpty();
-        $list.innerHTML = '';
-        rows.forEach(r => {
-          const div = document.createElement('div');
-          div.className = 'cloud-item';
-          div.innerHTML = `
-            <div class="cloud-meta">
-              <div><strong>ID:</strong> ${r.id || '(sin id)'} · <strong>Nombre:</strong> ${r.nombre || ''}</div>
-              <div><strong>Fecha:</strong> ${r.fecha || r.fecha_iso || ''} · <strong>Nómina:</strong> ${r.numero_nomina || ''}</div>
-            </div>
-            <div class="cloud-actions">
-              <button class="btn btn-primary btn-send">Enviar</button>
-              <button class="btn btn-danger btn-del">Eliminar</button>
-            </div>
-          `;
-          // Enviar ahora
-          div.querySelector('.btn-send').addEventListener('click', async () => {
-            try {
-              await postJSON('clinica_cloud_send', { id: r.id });
-              alert('Enviado y cerrado → hoja "Clínica"');
-              await refreshList();
-            } catch (e) {
-              alert('No se pudo enviar: ' + e.message);
-            }
-          });
-          // Eliminar
-          div.querySelector('.btn-del').addEventListener('click', async () => {
-            if (!confirm('¿Eliminar este pendiente de la nube?')) return;
-            try {
-              await postJSON('clinica_cloud_delete', { id: r.id });
-              await refreshList();
-            } catch (e) {
-              alert('No se pudo eliminar: ' + e.message);
-            }
-          });
-          $list.appendChild(div);
-        });
-      }
-
-      async function refreshList() {
-        try {
-          const out = await postJSON('clinica_cloud_list', {});
-          renderRows(out.rows || out.data || []);
-        } catch (e) {
-          // Si el backend aún no tiene estos endpoints, no rompemos tu app
-          renderEmpty();
-          console.warn('clinica_cloud_list no disponible:', e.message);
-        }
-      }
-
-      // Guardar en la nube (pendiente del backend)
-      $btnSave.addEventListener('click', async () => {
-        try {
-          const data = window.clinicaFormData();
-          const out = await postJSON('clinica_cloud_save', data);
-          alert('Guardado en la nube: ' + (out.id || 'OK'));
-          await refreshList();
-        } catch (e) {
-          alert('No se pudo guardar en la nube: ' + e.message);
-        }
+    async function postJSON(action, data) {
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ action, data })
       });
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error || 'Error desconocido');
+      return j;
+    }
 
-      $btnRefresh.addEventListener('click', refreshList);
+    // 2) Guardar en la nube (usa la acción que SÍ existe en tu backend)
+    async function cloudSave() {
+      try {
+        const data = window.clinicaFormData();
+        const out = await postJSON('clinica_save_pending', data);
+        alert(`Pendiente guardado: ${out.id || 'OK'}`);
+        await cloudList(); // refresca
+      } catch (e) {
+        alert('No se pudo guardar en la nube: ' + e.message);
+      }
+    }
 
-      // Cargamos la lista al abrir
-      refreshList();
-    })();
+    // 3) Listar pendientes
+    async function cloudList() {
+      try {
+        const out = await postJSON('clinica_list_pending', {});
+        const rows = Array.isArray(out.rows) ? out.rows : (out.data || out.list || []);
+        renderCloud(rows);
+      } catch (e) {
+        // Si la acción no existe aún en backend, no rompemos la UI
+        document.getElementById('cloud-empty').textContent =
+          'No se pudo listar (¿falta acción clinica_list_pending en el backend?).';
+        document.getElementById('cloud-empty').style.display = '';
+        document.getElementById('cloud-table').style.display = 'none';
+      }
+    }
+
+    // 4) Eliminar pendiente
+    async function cloudDelete(id) {
+      if (!confirm('¿Eliminar este pendiente de la nube?')) return;
+      try {
+        await postJSON('clinica_delete_pending', { id });
+        await cloudList();
+      } catch (e) {
+        alert('No se pudo eliminar: ' + e.message);
+      }
+    }
+
+    // 5) Reanudar: copia los datos a tu formulario
+    function cloudResume(row) {
+      const g = id => document.getElementById(id);
+      // Acepta tanto objetos planos como row.data
+      const d = row.data || row;
+      if (!d) return;
+
+      g('input-id').value = d.id || row.id || '';
+      g('input-fecha').value = d.fecha_iso || d.fecha || '';
+      g('input-nombre').value = d.nombre || '';
+      g('input-nomina').value = d.numero_nomina || d.nomina || '';
+      g('input-edad').value = d.edad || '';
+      g('select-sexo').value = d.sexo || '';
+      g('input-puesto').value = d.puesto || '';
+      g('input-area-laboral').value = d.area_laboral || d.area || '';
+      g('input-area-incidente').value = d.area_incidente || '';
+      g('input-zona').value = d.zona_cuerpo || d.zona || '';
+      g('input-hemisferio').value = d.hemisferio || '';
+      g('input-diagnostico').value = d.diagnostico || '';
+      g('input-exploracion').value = d.exploracion || '';
+      g('input-motivo').value = d.motivo || '';
+      g('input-antecedentes').value = d.antecedentes || '';
+      g('input-clasificacion').value = d.clasificacion || '';
+      g('input-seguimiento').value = d.seguimiento || '';
+      g('input-indicaciones').value = d.indicaciones || '';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Render de la tabla
+    function renderCloud(rows) {
+      const empty = document.getElementById('cloud-empty');
+      const table = document.getElementById('cloud-table');
+      const tbody = document.getElementById('cloud-tbody');
+
+      if (!rows || rows.length === 0) {
+        empty.textContent = 'No hay pendientes en la nube.';
+        empty.style.display = '';
+        table.style.display = 'none';
+        tbody.innerHTML = '';
+        return;
+      }
+
+      empty.style.display = 'none';
+      table.style.display = '';
+      tbody.innerHTML = rows.map(r => {
+        const d = r.data || r;
+        const id = d.id || r.id || '(sin id)';
+        const nombre = (d.nombre || '').toString().slice(0, 60);
+        const fecha = d.fecha_iso || d.fecha || '';
+        return `
+          <tr>
+            <td>${id}</td>
+            <td>${nombre || '-'}</td>
+            <td>${fecha || '-'}</td>
+            <td>
+              <button class="btn btn-secondary" onclick='(${cloudResume.toString()})(${JSON.stringify(r)})'>Reanudar</button>
+              <button class="btn btn-danger" onclick="cloudDelete('${id.replace(/"/g,'\\"')}')">Eliminar</button>
+            </td>
+          </tr>`;
+      }).join('');
+    }
+
+    // Eventos
+    document.getElementById('btn-guardar-nube').addEventListener('click', cloudSave);
+    document.getElementById('btn-refresh').addEventListener('click', cloudList);
+
+    // Carga inicial (no rompe si aún no existe la acción listar)
+    cloudList();
   </script>
 </body>
 </html>
