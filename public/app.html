@@ -1,145 +1,235 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Registro Clínico</title>
+  <link rel="icon" href="data:," />
   <style>
-    :root { --gap: 12px; --accent:#0ea5e9; }
-    html,body{margin:0;padding:0;background:#f7fafc;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue','Noto Sans',Arial,'Apple Color Emoji','Segoe UI Emoji';color:#0f172a}
-    .container{max-width:1200px;margin:32px auto;padding:0 16px}
-    h1{margin:0 0 8px 0;font-size:28px}
-    .badge{display:inline-block;background:#e2f2fd;color:#075985;border:1px solid #bae6fd;padding:2px 8px;border-radius:999px;font-size:12px;margin-left:8px}
-    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--gap)}
-    .col-6{grid-column:span 6}
-    .col-4{grid-column:span 4}
-    .col-3{grid-column:span 3}
-    .col-12{grid-column:span 12}
-    label{display:block;font-size:13px;color:#334155;margin-bottom:6px}
-    input,select,textarea{
-      width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;
-      padding:10px 12px;background:#fff;outline:none;font-size:14px
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+      margin: 0;
+      background: #f8fafc;
+      color: #0f172a;
     }
-    textarea{min-height:80px;resize:vertical}
-    input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px #bae6fd}
-    .actions{display:flex;gap:var(--gap);margin-top:18px}
-    .btn{
-      border:none;border-radius:12px;padding:12px 18px;font-weight:600;cursor:pointer
+    header {
+      background: #0ea5e9;
+      color: white;
+      padding: 14px 20px;
+      font-size: 18px;
+      font-weight: 600;
     }
-    .btn-primary{background:var(--accent);color:#fff}
-    .btn-secondary{background:#e2e8f0;color:#0f172a}
-    .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px}
+    main {
+      padding: 20px;
+      max-width: 1000px;
+      margin: auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+    label { display:block; margin-top:10px; font-weight:500; }
+    input, select, textarea {
+      width: 100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px;
+    }
+    button {
+      background: #0ea5e9; border: none; color: white;
+      padding: 10px 14px; border-radius: 6px; margin-top: 12px;
+      cursor: pointer;
+    }
+    button:hover { background: #0284c7; }
+    footer {
+      text-align: center; padding: 20px; color: #64748b; font-size: 14px;
+    }
+    table { width:100%; border-collapse: collapse; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
+    th { background: #f1f5f9; }
   </style>
 </head>
+
 <body>
-  <div class="container">
-    <h1>Registro Clínico <span class="badge">v1</span></h1>
+  <header>Registro Clínico</header>
 
-    <div class="card">
-      <div class="grid">
-        <div class="col-3">
-          <label for="input-id">ID</label>
-          <input id="input-id" type="text" placeholder="ID o folio">
-        </div>
+  <main>
+    <!-- ===================================================== -->
+    <!-- TU FORMULARIO EXISTENTE (no lo toques, ejemplo abajo) -->
+    <!-- ===================================================== -->
+    <form id="clinica-form">
+      <label>ID</label>
+      <input id="input-id" placeholder="ID del caso" />
 
-        <div class="col-4">
-          <label for="input-fecha">Fecha/Hora ISO</label>
-          <input id="input-fecha" type="text" placeholder="auto (ISO 8601)">
-        </div>
+      <label>Nombre</label>
+      <input id="input-nombre" placeholder="Nombre del paciente" />
 
-        <div class="col-5">
-          <label for="input-nombre">Nombre</label>
-          <input id="input-nombre" type="text" placeholder="Nombre y apellidos">
-        </div>
+      <label>Número de nómina</label>
+      <input id="input-nomina" placeholder="12345" />
 
-        <div class="col-3">
-          <label for="input-nomina">Número de nómina</label>
-          <input id="input-nomina" type="text" placeholder="Ej. A12345">
-        </div>
+      <label>Área laboral</label>
+      <input id="input-area-laboral" placeholder="Área" />
 
-        <div class="col-3">
-          <label for="input-edad">Edad</label>
-          <input id="input-edad" type="text" placeholder="Ej. 34">
-        </div>
+      <label>Diagnóstico</label>
+      <textarea id="input-diagnostico" rows="3" placeholder="Escribe diagnóstico..."></textarea>
 
-        <div class="col-3">
-          <label for="select-sexo">Sexo</label>
-          <select id="select-sexo">
-            <option value="">Selecciona…</option>
-            <option value="M">M</option>
-            <option value="F">F</option>
-          </select>
-        </div>
-
-        <div class="col-3">
-          <label for="input-puesto">Puesto</label>
-          <input id="input-puesto" type="text">
-        </div>
-
-        <div class="col-6">
-          <label for="input-area-laboral">Área laboral</label>
-          <input id="input-area-laboral" type="text">
-        </div>
-
-        <div class="col-6">
-          <label for="input-area-incidente">Área del incidente</label>
-          <input id="input-area-incidente" type="text">
-        </div>
-
-        <div class="col-6">
-          <label for="input-zona">Zona del cuerpo afectada</label>
-          <input id="input-zona" type="text" placeholder="Ej. mano derecha">
-        </div>
-
-        <div class="col-6">
-          <label for="input-hemisferio">Hemisferio</label>
-          <input id="input-hemisferio" type="text" placeholder="Izquierdo / Derecho / NA">
-        </div>
-
-        <div class="col-6">
-          <label for="input-diagnostico">Diagnóstico</label>
-          <input id="input-diagnostico" type="text">
-        </div>
-
-        <div class="col-6">
-          <label for="input-exploracion">Exploración</label>
-          <input id="input-exploracion" type="text">
-        </div>
-
-        <div class="col-6">
-          <label for="input-motivo">Motivo</label>
-          <input id="input-motivo" type="text">
-        </div>
-
-        <div class="col-6">
-          <label for="input-antecedentes">Antecedentes</label>
-          <input id="input-antecedentes" type="text">
-        </div>
-
-        <div class="col-6">
-          <label for="input-clasificacion">Clasificación del accidente</label>
-          <input id="input-clasificacion" type="text" placeholder="FAT/LTI/MTC/FAC/UA&C">
-        </div>
-
-        <div class="col-6">
-          <label for="input-seguimiento">Seguimiento (cita)</label>
-          <input id="input-seguimiento" type="text" placeholder="dd/mm/aaaa o texto">
-        </div>
-
-        <div class="col-12">
-          <label for="input-indicaciones">Indicaciones / Tratamiento</label>
-          <textarea id="input-indicaciones" placeholder="Medicamentos, reposo, recomendaciones…"></textarea>
-        </div>
-
-        <div class="col-12 actions">
-          <button class="btn btn-secondary">Guardar (Pendiente)</button>
-          <button class="btn btn-primary">Cerrar caso → hoja “Clínica”</button>
-        </div>
+      <div style="margin-top:14px;">
+        <button type="button">Guardar (Pendiente)</button>
+        <button type="button">Cerrar caso</button>
       </div>
-    </div>
-  </div>
+    </form>
 
-  <!-- Bridge: engancha los botones al backend GAS vía /api/gsheet -->
+    <!-- ===================================================== -->
+    <!-- SECCIÓN NUEVA: Casos en la nube (pendientes) -->
+    <!-- ===================================================== -->
+    <section id="nube" style="margin-top:32px">
+      <h2 style="margin:0 0 12px 0;">Casos en la nube (pendientes)</h2>
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
+        <button id="btn-refresh-nube" type="button">Actualizar lista</button>
+        <span id="nube-status" style="font-size:0.95rem; color:#666;"></span>
+      </div>
+
+      <div id="nube-empty" style="display:none; color:#666;">
+        No hay pendientes en la nube.
+      </div>
+
+      <div id="nube-list" style="display:none;">
+        <!-- La tabla se genera dinámicamente -->
+      </div>
+    </section>
+    <!-- ===================================================== -->
+  </main>
+
+  <footer>© 2025 Clínica | EHS System</footer>
+
+  <!-- ===================================================== -->
+  <!-- SCRIPT PRINCIPAL DEL PUENTE -->
+  <!-- ===================================================== -->
   <script src="/clinica-bridge.js"></script>
+
+  <!-- ===================================================== -->
+  <!-- SCRIPT NUEVO: Manejo de "Casos en la nube" -->
+  <!-- ===================================================== -->
+  <script>
+  (() => {
+    const API = '/api/gsheet';
+
+    function qs(sel) { return document.querySelector(sel); }
+    function qsa(sel) { return Array.from(document.querySelectorAll(sel)); }
+
+    async function apiGet(action, params = {}) {
+      const url = new URL(API, location.origin);
+      url.searchParams.set('action', action);
+      for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+      const res = await fetch(url.toString(), { method: 'GET' });
+      return res.json();
+    }
+
+    async function apiPost(action, data = {}) {
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, data }),
+      });
+      return res.json();
+    }
+
+    function setStatus(text) { qs('#nube-status').textContent = text || ''; }
+
+    function renderList(items) {
+      const empty = qs('#nube-empty');
+      const list  = qs('#nube-list');
+
+      if (!items || !items.length) {
+        empty.style.display = 'block';
+        list.style.display  = 'none';
+        list.innerHTML = '';
+        return;
+      }
+
+      empty.style.display = 'none';
+      list.style.display  = 'block';
+
+      const rows = items.map((it, i) => {
+        const id     = it.id || it.rowId || it.key || `row-${i+1}`;
+        const fecha  = it.fecha || it.ts || it.ts_inicial || '';
+        const nombre = it.nombre || it.employee || it.paciente || '';
+        return `
+          <tr>
+            <td style="white-space:nowrap">${id}</td>
+            <td>${fecha}</td>
+            <td>${nombre}</td>
+            <td style="text-align:right">
+              <button class="btn-send" data-id="${id}">Enviar ahora</button>
+              <button class="btn-del" data-id="${id}" style="margin-left:6px">Eliminar</button>
+            </td>
+          </tr>`;
+      }).join('');
+
+      list.innerHTML = `
+        <div style="overflow:auto; border:1px solid #e5e7eb; border-radius:8px">
+          <table style="width:100%; border-collapse:collapse; font-size:0.95rem">
+            <thead style="background:#f8fafc">
+              <tr>
+                <th style="text-align:left; padding:8px 10px;">ID</th>
+                <th style="text-align:left; padding:8px 10px;">Fecha</th>
+                <th style="text-align:left; padding:8px 10px;">Nombre</th>
+                <th style="text-align:right; padding:8px 10px;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+
+      // Acciones
+      qsa('#nube-list .btn-send').forEach(b => {
+        b.addEventListener('click', async () => {
+          const id = b.getAttribute('data-id');
+          setStatus('Enviando…');
+          try {
+            const r = await apiPost('clinica_send_pending', { id });
+            if (!r.ok) throw new Error(r.error || 'Error al enviar');
+            setStatus('Enviado ✔');
+            await refresh();
+          } catch (e) {
+            alert('No se pudo enviar: ' + e.message);
+            setStatus('');
+          }
+        });
+      });
+
+      qsa('#nube-list .btn-del').forEach(b => {
+        b.addEventListener('click', async () => {
+          const id = b.getAttribute('data-id');
+          if (!confirm(`¿Eliminar pendiente ${id}?`)) return;
+          setStatus('Eliminando…');
+          try {
+            const r = await apiPost('clinica_delete_pending', { id });
+            if (!r.ok) throw new Error(r.error || 'Error al eliminar');
+            setStatus('Eliminado ✔');
+            await refresh();
+          } catch (e) {
+            alert('No se pudo eliminar: ' + e.message);
+            setStatus('');
+          }
+        });
+      });
+    }
+
+    async function refresh() {
+      try {
+        setStatus('Cargando…');
+        const r = await apiGet('clinica_list_pending');
+        if (!r.ok) throw new Error(r.error || 'Respuesta inválida');
+        renderList(r.items || []);
+        setStatus('');
+      } catch (e) {
+        renderList([]);
+        setStatus('No se pudo listar');
+        console.error(e);
+      }
+    }
+
+    qs('#btn-refresh-nube')?.addEventListener('click', refresh);
+    document.addEventListener('DOMContentLoaded', refresh);
+  })();
+  </script>
 </body>
 </html>
