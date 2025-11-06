@@ -70,7 +70,7 @@
   }
 
   function bind() {
-    const bSave  = findButton(/guardar\s*\(pendiente\)/i);
+    const bSave = findButton(/guardar\s*\(pendiente\)/i);
     const bClose = findButton(/cerrar\s*caso/i);
 
     if (bSave && !bSave._clinicaBound) {
