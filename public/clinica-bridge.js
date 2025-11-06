@@ -72,7 +72,7 @@
   }
 
   function bind() {
-    const bSave = findButton(/guardar\s*\(pendiente\)/i);
+    const bSave  = findButton(/guardar\s*\(pendiente\)/i);
     const bClose = findButton(/cerrar\s*caso/i);
 
     if (bSave && !bSave._clinicaBound) {
@@ -87,7 +87,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     bind();
-    // Reintentos por si tus botones aparecen tarde
+    // Reintentos por si los botones renderizan tarde
     setTimeout(bind, 400);
     setTimeout(bind, 1000);
     setTimeout(bind, 2000);
