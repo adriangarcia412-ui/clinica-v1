@@ -4,25 +4,18 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0"
     />
     <title>Registro Clínico</title>
-
-    <!-- (Opcional) Favicon / estilos mínimos -->
-    <link rel="icon" href="/favicon.ico" />
-
-    <!-- Tu aplicación (Vite/Vanilla) -->
-    <!-- NO toco nada de tu app: este script es el que ya venías usando -->
-    <script type="module" src="/src/main.js"></script>
-
-    <!-- ✅ Bridge: se carga en modo defer para NO interferir con tu app -->
-    <script defer src="/clinica-bridge.js"></script>
+    <meta name="description" content="App de Registro Clínico" />
   </head>
-
   <body>
-    <!-- Mantengo el mismo contenedor de siempre para tu app -->
     <div id="app"></div>
 
-    <!-- (Nada más aquí) -->
+    <!-- Tu app (no tocar) -->
+    <script type="module" src="/src/main.js"></script>
+
+    <!-- Bridge para enlazar los botones con la API de Google Sheets -->
+    <script defer src="/clinica-bridge.js"></script>
   </body>
 </html>
