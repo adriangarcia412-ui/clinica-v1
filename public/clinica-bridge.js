@@ -17,11 +17,9 @@
   }
 
   function collectData() {
-    // Si ya tienes una función global para leer el form, la usamos
     if (typeof window.clinicaFormData === 'function') {
       return window.clinicaFormData();
     }
-    // Lectura por IDs (ajusta si tus IDs cambian)
     return {
       id: val('input-id'),
       fecha_iso: val('input-fecha') || new Date().toISOString(),
@@ -87,7 +85,6 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     bind();
-    // Reintentos por si los botones renderizan tarde
     setTimeout(bind, 400);
     setTimeout(bind, 1000);
     setTimeout(bind, 2000);
