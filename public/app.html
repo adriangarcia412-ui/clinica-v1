@@ -14,7 +14,6 @@
     .col-6{grid-column:span 6}
     .col-4{grid-column:span 4}
     .col-3{grid-column:span 3}
-    .col-5{grid-column:span 5}
     .col-12{grid-column:span 12}
     label{display:block;font-size:13px;color:#334155;margin-bottom:6px}
     input,select,textarea{
@@ -24,21 +23,15 @@
     textarea{min-height:80px;resize:vertical}
     input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px #bae6fd}
     .actions{display:flex;gap:var(--gap);margin-top:18px}
-    .btn{
-      border:none;border-radius:12px;padding:12px 18px;font-weight:600;cursor:pointer
-    }
-    .btn-primary{background:#155eef;color:#fff}
+    .btn{border:none;border-radius:12px;padding:12px 18px;font-weight:600;cursor:pointer}
+    .btn-primary{background:#1d4ed8;color:#fff}
     .btn-secondary{background:#e2e8f0;color:#0f172a}
     .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px}
-    .section-title{font-size:28px;font-weight:800;margin:24px 0 12px 0}
-    .muted{color:#475569}
-    .pill{display:inline-block;font-size:12px;padding:4px 10px;border-radius:999px;background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;margin-left:8px}
-    .list{margin-top:12px;border:1px solid #e2e8f0;border-radius:12px;background:#fff}
-    .list-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid #f1f5f9}
-    .list-row:first-child{border-top:none}
-    .row-col{flex:1}
-    .row-actions{display:flex;gap:8px}
-    .btn-mini{padding:6px 10px;border-radius:10px;font-size:12px;cursor:pointer;border:1px solid #cbd5e1;background:#fff}
+    .section{margin-top:28px}
+    .pill{display:inline-block;background:#e7effe;color:#1d4ed8;border:1px solid #c7d2fe;border-radius:999px;padding:4px 10px;font-size:12px;margin-left:8px}
+    .list{margin:8px 0 0 0;padding:0;list-style:none}
+    .item{border:1px solid #e2e8f0;background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+    .muted{color:#64748b}
   </style>
 </head>
 <body>
@@ -148,23 +141,23 @@
       </div>
     </div>
 
-    <div style="height:16px"></div>
-
-    <div class="card">
-      <div class="section-title">
-        Casos en la nube (pendientes)
-        <span class="pill">Nube temporal</span>
-      </div>
-      <p class="muted" id="cloud-hint">Aquí verás los casos que se guardan temporalmente.</p>
-      <div class="actions" style="margin-top:8px">
+    <div class="card section">
+      <h2 style="margin:0">Casos en la nube (pendientes) <span class="pill">Nube temporal</span></h2>
+      <p class="muted" id="cloud-subtitle">Aquí verás los casos que se guardan temporalmente.</p>
+      <div style="margin:12px 0">
         <button id="btn-refresh" class="btn btn-secondary">Actualizar lista</button>
       </div>
-      <div id="cloud-list" class="list" style="margin-top:12px;">
-        <div class="list-row"><div class="row-col muted" id="cloud-status">Cargando…</div></div>
-      </div>
+      <div id="cloud-status" class="muted"></div>
+      <ul id="cloud-list" class="list"></ul>
     </div>
   </div>
 
+  <!-- Config de la ruta del proxy en Vercel -->
+  <script>
+    window.CLINICA_API_BASE = "/api/gsheet";
+  </script>
+
+  <!-- Lógica de botones y render de la lista -->
   <script src="/clinica-bridge.js"></script>
 </body>
 </html>
