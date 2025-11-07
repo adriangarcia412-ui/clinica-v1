@@ -29,13 +29,13 @@
     .btn-secondary{background:#1d4ed8;color:#fff}
     .btn-ghost{background:#e2e8f0;color:#0f172a}
     .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px}
-    .box{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;margin-top:18px}
-    .list{margin-top:12px}
-    .row{display:flex;align-items:center;justify-content:space-between;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-top:8px;background:#fff}
-    .row strong{margin-right:8px}
-    .row .mini{opacity:.8;font-size:12px}
-    .row .actions{gap:8px;margin:0}
-    .pill{font-size:12px;background:#e0e7ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:999px;padding:4px 8px;margin-left:8px}
+    .cloud{margin-top:22px}
+    .cloud h2{margin:0 0 12px 0;font-size:26px}
+    .tag{display:inline-block;font-size:12px;background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;padding:2px 8px;border-radius:999px;margin-left:10px}
+    .list{margin-top:10px}
+    .row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px dashed #e2e8f0}
+    .row small{color:#475569}
+    .spacer{flex:1}
   </style>
 </head>
 <body>
@@ -139,165 +139,129 @@
         </div>
 
         <div class="col-12 actions">
-          <!-- Quitamos Guardar (Pendiente) -->
           <button id="btn-close" class="btn btn-primary">Cerrar caso → hoja “Clínica”</button>
-          <button id="btn-cloud-save" class="btn btn-secondary">Guardar en la nube</button>
+          <button id="btn-cloud" class="btn btn-secondary">Guardar en la nube</button>
         </div>
       </div>
     </div>
 
-    <!-- Casos en la nube -->
-    <div class="box" id="cloud-box">
-      <h2 style="margin:0 0 12px 0">Casos en la nube (pendientes)
-        <span class="pill">Nube temporal</span>
-      </h2>
-      <div class="actions">
-        <button id="btn-cloud-refresh" class="btn btn-ghost">Actualizar lista</button>
+    <!-- Panel de casos en la nube -->
+    <div class="card cloud" id="cloud-card">
+      <h2>Casos en la nube (pendientes) <span class="tag">Nube temporal</span></h2>
+      <div class="actions" style="margin-top:0">
+        <button id="btn-refresh" class="btn btn-ghost">Actualizar lista</button>
       </div>
-      <div id="cloud-list" class="list">No se pudo listar (¿falta acción <code>clinica_list_pending</code> en el backend?).</div>
+      <div id="cloud-list" class="list">No hay pendientes en la nube.</div>
     </div>
   </div>
 
-  <!-- Hook para que el bridge pueda leer el formulario -->
-  <script>
-    window.clinicaFormData = function () {
-      const v = id => document.getElementById(id)?.value?.trim() || '';
-      return {
-        id: v('input-id'),
-        fecha_iso: v('input-fecha') || new Date().toISOString(),
-        nombre: v('input-nombre'),
-        numero_nomina: v('input-nomina'),
-        edad: v('input-edad'),
-        sexo: document.getElementById('select-sexo')?.value || '',
-        puesto: v('input-puesto'),
-        area_laboral: v('input-area-laboral'),
-        area_incidente: v('input-area-incidente'),
-        zona_cuerpo: v('input-zona'),
-        hemisferio: v('input-hemisferio'),
-        diagnostico: v('input-diagnostico'),
-        exploracion: v('input-exploracion'),
-        motivo: v('input-motivo'),
-        antecedentes: v('input-antecedentes'),
-        clasificacion: v('input-clasificacion'),
-        seguimiento: v('input-seguimiento'),
-        indicaciones: v('input-indicaciones'),
-      };
-    };
-  </script>
-
-  <!-- Bridge existente: mantiene “Cerrar caso” sin tocar nada -->
+  <!-- Bridge: engancha botones de “Cerrar caso” y lectura del formulario -->
   <script src="/clinica-bridge.js"></script>
 
-  <!-- JS de nube (guardar/listar/eliminar/rehacer) -->
+  <!-- Lógica ligera para la nube (usa /api/gsheet → GAS) -->
   <script>
-    const API = '/api/gsheet';
+    // Usa la misma lectura que el bridge: si existe window.clinicaFormData(), úsala.
+    function getFormData() {
+      if (typeof window.clinicaFormData === "function") return window.clinicaFormData();
+      const val = id => document.getElementById(id)?.value?.trim() || "";
+      return {
+        id: val("input-id"),
+        fecha_iso: val("input-fecha") || new Date().toISOString(),
+        nombre: val("input-nombre"),
+        numero_nomina: val("input-nomina"),
+        edad: val("input-edad"),
+        sexo: document.getElementById("select-sexo")?.value || "",
+        area_laboral: val("input-area-laboral"),
+        area_incidente: val("input-area-incidente"),
+        puesto: val("input-puesto"),
+        zona_cuerpo: val("input-zona"),
+        diagnostico: val("input-diagnostico"),
+        exploracion: val("input-exploracion"),
+        motivo: val("input-motivo"),
+        antecedentes: val("input-antecedentes"),
+        hemisferio: val("input-hemisferio"),
+        clasificacion: val("input-clasificacion"),
+        indicaciones: val("input-indicaciones"),
+        seguimiento: val("input-seguimiento")
+      };
+    }
 
-    async function postJSON(action, data) {
-      const res = await fetch(API, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action, data }),
+    async function callApi(action, data) {
+      const res = await fetch("/api/gsheet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, data })
       });
-      const j = await res.json().catch(()=>({ok:false,error:'Respuesta inválida'}));
-      if (!j.ok) throw new Error(j.error || 'Error');
-      return j;
+      return res.json();
     }
 
-    // Guardar en la nube
-    async function onCloudSave() {
+    async function cloudSave() {
       try {
-        const data = window.clinicaFormData();
-        await postJSON('clinica_cloud_save', data);
-        alert('Pendiente guardado: OK');
-        await refreshCloud();
-      } catch(e) {
-        alert('No se pudo guardar en la nube: ' + e.message);
+        const data = getFormData();
+        const j = await callApi("clinica_cloud_save", data);
+        if (!j.ok) throw new Error(j.error || "Fallo al guardar");
+        alert("Guardado en la nube: OK");
+        await cloudList();
+      } catch (e) {
+        alert("No se pudo guardar en la nube: " + e.message);
       }
     }
 
-    // Listar
-    async function refreshCloud() {
-      const box = document.getElementById('cloud-list');
-      box.textContent = 'Cargando…';
-      try {
-        const j = await postJSON('clinica_list_pending', {});
-        const rows = j.rows || [];
-        if (!rows.length) {
-          box.textContent = 'No hay pendientes en la nube.';
-          return;
-        }
-        box.innerHTML = '';
-        rows.forEach(r => {
-          const el = document.createElement('div');
-          el.className = 'row';
-          el.innerHTML = `
-            <div>
-              <strong>${r.id || '(sin id)'}</strong>
-              <span class="mini">• ${r.fecha_iso || ''}</span>
-              <span class="mini">• ${r.nombre || ''}</span>
-            </div>
-            <div class="actions">
-              <button class="btn btn-ghost" data-act="resume" data-id="${r.id}">Reanudar</button>
-              <button class="btn btn-ghost" data-act="delete" data-id="${r.id}">Eliminar</button>
-            </div>`;
-          box.appendChild(el);
+    function renderList(rows) {
+      const box = document.getElementById("cloud-list");
+      if (!rows || !rows.length) {
+        box.textContent = "No hay pendientes en la nube.";
+        return;
+      }
+      box.innerHTML = "";
+      rows.forEach(r => {
+        const div = document.createElement("div");
+        div.className = "row";
+        const id = r.id || r._id || "(sin id)";
+        const fecha = r.fecha_iso || r.ts || "";
+        const nombre = r.nombre || "";
+        div.innerHTML = `
+          <strong>${id}</strong>
+          <small>${fecha}</small>
+          <span class="spacer"></span>
+          <small>${nombre}</small>
+          <button class="btn btn-ghost" data-del="${id}">Eliminar</button>
+        `;
+        box.appendChild(div);
+      });
+
+      // Bind eliminar
+      box.querySelectorAll("[data-del]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-del");
+          if (!confirm(`¿Eliminar pendiente ${id}?`)) return;
+          try {
+            const j = await callApi("clinica_delete_pending", { id });
+            if (!j.ok) throw new Error(j.error || "No se pudo eliminar");
+            await cloudList();
+          } catch (e) {
+            alert("No se pudo eliminar: " + e.message);
+          }
         });
-      } catch(e) {
-        box.textContent = 'No se pudo listar (' + e.message + ')';
+      });
+    }
+
+    async function cloudList() {
+      try {
+        const j = await callApi("clinica_list_pending", {});
+        if (!j.ok) throw new Error(j.error || "Fallo al listar");
+        renderList(j.rows || j.data || []);
+      } catch (e) {
+        document.getElementById("cloud-list").textContent =
+          "No se pudo listar (" + e.message + ").";
       }
     }
 
-    // Reanudar y eliminar
-    async function onCloudClick(ev){
-      const btn = ev.target.closest('button[data-act]');
-      if(!btn) return;
-      const id = btn.getAttribute('data-id');
-      const act = btn.getAttribute('data-act');
-      if(act === 'delete'){
-        if(!confirm('¿Eliminar pendiente ' + id + '?')) return;
-        try {
-          await postJSON('clinica_delete_pending', { id });
-          await refreshCloud();
-        } catch(e) {
-          alert('No se pudo eliminar: ' + e.message);
-        }
-      } else if (act === 'resume'){
-        try {
-          const j = await postJSON('clinica_get_pending', { id }); // opcional; si no existe, cargamos por list.data
-          const d = j.data || {};
-          const set = (id,val)=>{ const el=document.getElementById(id); if(el) el.value = (val??''); };
-          set('input-id', d.id);
-          set('input-fecha', d.fecha_iso);
-          set('input-nombre', d.nombre);
-          set('input-nomina', d.numero_nomina);
-          set('input-edad', d.edad);
-          const sel = document.getElementById('select-sexo'); if(sel) sel.value = d.sexo || '';
-          set('input-puesto', d.puesto);
-          set('input-area-laboral', d.area_laboral);
-          set('input-area-incidente', d.area_incidente);
-          set('input-zona', d.zona_cuerpo);
-          set('input-hemisferio', d.hemisferio);
-          set('input-diagnostico', d.diagnostico);
-          set('input-exploracion', d.exploracion);
-          set('input-motivo', d.motivo);
-          set('input-antecedentes', d.antecedentes);
-          set('input-clasificacion', d.clasificacion);
-          set('input-seguimiento', d.seguimiento);
-          set('input-indicaciones', d.indicaciones);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        } catch(e) {
-          alert('No se pudo reanudar: ' + e.message);
-        }
-      }
-    }
+    document.getElementById("btn-cloud").addEventListener("click", cloudSave);
+    document.getElementById("btn-refresh").addEventListener("click", cloudList);
 
-    // Bind
-    document.getElementById('btn-cloud-save').addEventListener('click', onCloudSave);
-    document.getElementById('btn-cloud-refresh').addEventListener('click', refreshCloud);
-    document.getElementById('cloud-list').addEventListener('click', onCloudClick);
-
-    // Carga inicial de lista
-    refreshCloud();
+    // Carga inicial de la lista
+    cloudList();
   </script>
 </body>
 </html>
