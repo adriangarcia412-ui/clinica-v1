@@ -29,19 +29,21 @@
     .btn-secondary{background:#1d4ed8;color:#fff}
     .btn-ghost{background:#e2e8f0;color:#0f172a}
     .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px}
-    .cloud{margin-top:22px}
-    .cloud h2{margin:0 0 12px 0;font-size:26px}
-    .tag{display:inline-block;font-size:12px;background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;padding:2px 8px;border-radius:999px;margin-left:10px}
-    .list{margin-top:10px}
-    .row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px dashed #e2e8f0}
-    .row small{color:#475569}
-    .spacer{flex:1}
+    .section-title{font-size:28px;font-weight:800;margin:0 0 12px}
+    .muted{color:#475569}
+    .tag{display:inline-block;font-size:12px;padding:4px 8px;border-radius:999px;background:#eef2ff;color:#3730a3}
+    .list{margin:8px 0 0 0;padding:0;list-style:none}
+    .item{padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff}
+    .item + .item{margin-top:8px}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .row small{color:#64748b}
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Registro Clínico <span class="badge">v1</span></h1>
 
+    <!-- FORMULARIO (igual a tu diseño, solo con IDs que necesita el bridge) -->
     <div class="card">
       <div class="grid">
         <div class="col-3">
@@ -139,136 +141,26 @@
         </div>
 
         <div class="col-12 actions">
-          <button id="btn-close" class="btn btn-primary" onclick="closeCase()">Cerrar caso → hoja “Clínica”</button>
-          <button id="btn-cloud" class="btn btn-secondary" onclick="cloudSave()">Guardar en la nube</button>
+          <button id="btn-close" class="btn btn-primary">Cerrar caso → hoja “Clínica”</button>
+          <button id="btn-cloud-save" class="btn btn-secondary">Guardar en la nube</button>
         </div>
       </div>
     </div>
 
-    <!-- Panel de casos en la nube -->
-    <div class="card cloud" id="cloud-card">
-      <h2>Casos en la nube (pendientes) <span class="tag">Nube temporal</span></h2>
-      <div class="actions" style="margin-top:0">
-        <button id="btn-refresh" class="btn btn-ghost" onclick="cloudList()">Actualizar lista</button>
+    <!-- CASOS EN LA NUBE (pendientes) -->
+    <div class="card" style="margin-top:18px">
+      <div class="row">
+        <h2 class="section-title">Casos en la nube (pendientes) <span class="tag">Nube temporal</span></h2>
+        <button id="btn-refresh-list" class="btn btn-ghost">Actualizar lista</button>
       </div>
-      <div id="cloud-list" class="list">No hay pendientes en la nube.</div>
+      <p id="pending-empty" class="muted" style="margin:8px 0 0">
+        No hay pendientes en la nube.
+      </p>
+      <ul id="pending-list" class="list" style="display:none"></ul>
     </div>
   </div>
 
-  <!-- ========== JS mínimo y autosuficiente ========== -->
-  <script>
-    // Diagnóstico rápido de errores
-    window.onerror = function(msg, src, line, col) {
-      alert("Error JS: " + msg + " (" + (src||"") + ":" + (line||"?") + ")");
-    };
-
-    // Lectura del formulario (mismos IDs que ya usas)
-    function getFormData() {
-      const val = id => document.getElementById(id)?.value?.trim() || "";
-      return {
-        id: val("input-id"),
-        fecha_iso: val("input-fecha") || new Date().toISOString(),
-        nombre: val("input-nombre"),
-        numero_nomina: val("input-nomina"),
-        edad: val("input-edad"),
-        sexo: document.getElementById("select-sexo")?.value || "",
-        area_laboral: val("input-area-laboral"),
-        area_incidente: val("input-area-incidente"),
-        puesto: val("input-puesto"),
-        zona_cuerpo: val("input-zona"),
-        diagnostico: val("input-diagnostico"),
-        exploracion: val("input-exploracion"),
-        motivo: val("input-motivo"),
-        antecedentes: val("input-antecedentes"),
-        hemisferio: val("input-hemisferio"),
-        clasificacion: val("input-clasificacion"),
-        indicaciones: val("input-indicaciones"),
-        seguimiento: val("input-seguimiento")
-      };
-    }
-
-    async function callApi(action, data) {
-      const res = await fetch("/api/gsheet", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, data })
-      });
-      return res.json();
-    }
-
-    async function closeCase() {
-      try {
-        const j = await callApi("clinica_close", getFormData());
-        if (!j.ok) throw new Error(j.error || "No se pudo cerrar el caso");
-        alert("Caso cerrado → hoja “Clínica”: OK");
-      } catch (e) {
-        alert("Fallo al cerrar caso: " + e.message);
-      }
-    }
-
-    async function cloudSave() {
-      try {
-        const j = await callApi("clinica_cloud_save", getFormData());
-        if (!j.ok) throw new Error(j.error || "No se pudo guardar");
-        alert("Guardado en la nube: OK");
-        await cloudList();
-      } catch (e) {
-        alert("No se pudo guardar en la nube: " + e.message);
-      }
-    }
-
-    function renderList(rows) {
-      const box = document.getElementById("cloud-list");
-      if (!rows || !rows.length) {
-        box.textContent = "No hay pendientes en la nube.";
-        return;
-      }
-      box.innerHTML = "";
-      rows.forEach(r => {
-        const div = document.createElement("div");
-        div.className = "row";
-        const id = r.id || r._id || "(sin id)";
-        const fecha = r.fecha_iso || r.ts || "";
-        const nombre = r.nombre || "";
-        div.innerHTML = `
-          <strong>${id}</strong>
-          <small>${fecha}</small>
-          <span class="spacer"></span>
-          <small>${nombre}</small>
-          <button class="btn btn-ghost" data-del="${id}">Eliminar</button>
-        `;
-        box.appendChild(div);
-      });
-
-      // bind eliminar
-      box.querySelectorAll("[data-del]").forEach(btn => {
-        btn.addEventListener("click", async () => {
-          const id = btn.getAttribute("data-del");
-          if (!confirm("¿Eliminar pendiente " + id + "?")) return;
-          try {
-            const j = await callApi("clinica_delete_pending", { id });
-            if (!j.ok) throw new Error(j.error || "No se pudo eliminar");
-            await cloudList();
-          } catch (e) {
-            alert("No se pudo eliminar: " + e.message);
-          }
-        });
-      });
-    }
-
-    async function cloudList() {
-      try {
-        const j = await callApi("clinica_list_pending", {});
-        if (!j.ok) throw new Error(j.error || "Fallo al listar");
-        renderList(j.rows || j.data || []);
-      } catch (e) {
-        document.getElementById("cloud-list").textContent =
-          "No se pudo listar (" + e.message + ").";
-      }
-    }
-
-    // Carga inicial del listado
-    cloudList();
-  </script>
+  <!-- Bridge -->
+  <script src="/clinica-bridge.js"></script>
 </body>
 </html>
