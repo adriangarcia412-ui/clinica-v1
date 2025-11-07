@@ -12,19 +12,31 @@
     .badge{display:inline-block;background:#e2f2fd;color:#075985;border:1px solid #bae6fd;padding:2px 8px;border-radius:999px;font-size:12px;margin-left:8px}
     .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--gap)}
     .col-6{grid-column:span 6}
+    .col-5{grid-column:span 5}
     .col-4{grid-column:span 4}
     .col-3{grid-column:span 3}
     .col-12{grid-column:span 12}
     label{display:block;font-size:13px;color:#334155;margin-bottom:6px}
-    input,select,textarea{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;padding:10px 12px;background:#fff;outline:none;font-size:14px}
+    input,select,textarea{
+      width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;
+      padding:10px 12px;background:#fff;outline:none;font-size:14px
+    }
     textarea{min-height:80px;resize:vertical}
     input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px #bae6fd}
-    .actions{display:flex;gap:var(--gap);margin-top:18px}
+    .actions{display:flex;gap:var(--gap);margin-top:18px;flex-wrap:wrap}
     .btn{border:none;border-radius:12px;padding:12px 18px;font-weight:600;cursor:pointer}
-    .btn-primary{background:var(--accent);color:#fff}
-    .btn-secondary{background:#1d4ed8;color:#fff}
-    .btn-ghost{background:#e2e8f0;color:#0f172a}
+    .btn-primary{background:#1d4ed8;color:#fff}
+    .btn-secondary{background:#e2e8f0;color:#0f172a}
+    .btn-ghost{background:#0b5ed7;color:#fff}
     .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px}
+    .muted{color:#64748b}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:16px}
+    .tag{font-size:12px;border-radius:999px;padding:2px 8px;background:#e7f1ff;color:#0b5ed7;border:1px solid #bfd8ff}
+    .list{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+    .item{border:1px solid #e2e8f0;border-radius:10px;padding:10px;background:#fff;display:flex;justify-content:space-between;gap:8px;align-items:center}
+    .item small{color:#64748b}
+    .danger{background:#ef4444;color:#fff;border:none;border-radius:8px;padding:6px 10px;cursor:pointer}
+    .right{display:flex;align-items:center;gap:8px}
   </style>
 </head>
 <body>
@@ -128,36 +140,27 @@
         </div>
 
         <div class="col-12 actions">
-          <!-- IMPORTANTE: type="button" e IDs -->
-          <button id="btnCerrarCaso"   type="button" class="btn btn-primary">Cerrar caso → hoja “Clínica”</button>
-          <button id="btnGuardarNube"  type="button" class="btn btn-secondary">Guardar en la nube</button>
+          <button id="btn-close" class="btn btn-primary">Cerrar caso → hoja “Clínica”</button>
+          <button id="btn-cloud-save" class="btn btn-ghost">Guardar en la nube</button>
         </div>
       </div>
     </div>
 
-    <!-- Casos en la nube -->
-    <div class="card" style="margin-top:16px">
-      <h2>Casos en la nube (pendientes) <span class="badge">Nube temporal</span></h2>
-      <div class="actions" style="margin:8px 0 12px 0">
-        <button id="btnListarNube" type="button" class="btn btn-ghost">Actualizar lista</button>
+    <div class="card" style="margin-top:18px">
+      <div class="row">
+        <h2 style="margin:0">Casos en la nube (pendientes)</h2>
+        <span class="tag">Nube temporal</span>
       </div>
-      <div id="listaPendientes">Cargando…</div>
+      <p class="muted" id="cloud-hint" style="margin:8px 0 12px 0"></p>
+      <div class="actions">
+        <button id="btn-refresh" class="btn btn-secondary">Actualizar lista</button>
+      </div>
+      <div id="cloud-empty" class="muted">No hay pendientes en la nube.</div>
+      <div id="cloud-list" class="list" style="display:none"></div>
     </div>
   </div>
 
-  <!-- Carga del bridge (desde /public) con defer para que exista el DOM -->
-  <script>
-    // señal de vida por si falla la carga del archivo real
-    window.__bridge_boot = 'pre';
-  </script>
-  <script src="/clinica-bridge.js" defer></script>
-  <script>
-    // Si después de load no existe la marca, es que /clinica-bridge.js no cargó (404 o error sintaxis)
-    window.addEventListener('load', () => {
-      if (!window.__bridge_ok__) {
-        alert('El archivo /clinica-bridge.js no se cargó. Verifica que exista en /public y que no tenga errores de sintaxis.');
-      }
-    });
-  </script>
+  <!-- Lógica que engancha el formulario con el backend -->
+  <script src="/clinica-bridge.js"></script>
 </body>
 </html>
