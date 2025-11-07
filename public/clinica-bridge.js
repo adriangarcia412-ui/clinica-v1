@@ -1,100 +1,112 @@
 // public/clinica-bridge.js
-// Marca para comprobar carga
-window.__bridge_ok__ = true;
+// Conecta los botones del formulario con el proxy /api/gsheet y tu GAS.
+// IDs usados: btnCerrarCaso, btnGuardarNube, btnListarNube, listaPendientes
+// Campos del form: coinciden con tus IDs actuales.
 
 (function () {
-  function q(id) { return document.getElementById(id); }
+  const $ = (sel) => document.querySelector(sel);
 
-  const btnCerrar = q('btnCerrarCaso');
-  const btnGuardar = q('btnGuardarNube');
-  const btnListar = q('btnListarNube');
-  const contLista = q('listaPendientes');
-
-  // Serializa todos los inputs/select/textarea por ID
-  function serializeForm() {
-    const fields = document.querySelectorAll('input, select, textarea');
-    const o = {};
-    fields.forEach(el => {
-      if (el.id) o[el.id] = el.value;
-    });
-    return o;
+  function val(id) {
+    const el = document.getElementById(id);
+    return el ? el.value.trim() : '';
   }
 
-  async function callAPI(action, payload) {
-    const url = `/api/gsheet?action=${encodeURIComponent(action)}`;
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload || {})
-    });
-    const ct = (r.headers.get('content-type') || '').toLowerCase();
-    if (!ct.includes('application/json')) {
-      const raw = await r.text();
-      throw new Error(`Respuesta no JSON del proxy: ${raw.slice(0, 300)}...`);
-    }
-    const j = await r.json();
-    if (!j.ok) {
-      if (j.html_excerpt) throw new Error(`${j.error}\n\nHTML:\n${j.html_excerpt}`);
-      throw new Error(j.error || 'Error desconocido');
-    }
-    return j;
+  function getFormData() {
+    return {
+      id: val('input-id'),
+      fecha: val('input-fecha'),
+      nombre: val('input-nombre'),
+      nomina: val('input-nomina'),
+      edad: val('input-edad'),
+      sexo: val('select-sexo'),
+      puesto: val('input-puesto'),
+      area_laboral: val('input-area-laboral'),
+      area_incidente: val('input-area-incidente'),
+      zona: val('input-zona'),
+      hemisferio: val('input-hemisferio'),
+      diagnostico: val('input-diagnostico'),
+      exploracion: val('input-exploracion'),
+      motivo: val('input-motivo'),
+      antecedentes: val('input-antecedentes'),
+      clasificacion: val('input-clasificacion'),
+      seguimiento: val('input-seguimiento'),
+      indicaciones: val('input-indicaciones'),
+    };
   }
 
-  function renderLista(items) {
-    if (!Array.isArray(items) || items.length === 0) {
-      contLista.innerHTML = '<p>No hay pendientes en la nube.</p>';
+  async function callApi(action, payload) {
+    try {
+      const resp = await fetch(`/api/gsheet?action=${encodeURIComponent(action)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || {}),
+        cache: 'no-store',
+      });
+      const data = await resp.json().catch(() => ({}));
+      return { ok: resp.ok && data && data.ok !== false, data };
+    } catch (e) {
+      return { ok: false, data: { error: (e && e.message) || e } };
+    }
+  }
+
+  function renderPendientes(items) {
+    const cont = $('#listaPendientes');
+    if (!cont) return;
+    cont.innerHTML = '';
+    if (!items || !items.length) {
+      cont.innerHTML = '<p>No hay pendientes en la nube.</p>';
       return;
     }
-    const lis = items.map(it => {
-      const folio = it['input-id'] || it.id || '';
-      const fecha = it['input-fecha'] || it.fecha || '';
-      const nombre = it['input-nombre'] || it.nombre || '';
-      return `<li><strong>${folio}</strong> · ${fecha} · ${nombre}</li>`;
-    }).join('');
-    contLista.innerHTML = `<ul>${lis}</ul>`;
+    const ul = document.createElement('ul');
+    ul.style.margin = '8px 0';
+    items.forEach((it) => {
+      const li = document.createElement('li');
+      li.textContent = `[${it.id || 's/id'}] ${it.nombre || ''} — ${it.fecha || ''}`;
+      ul.appendChild(li);
+    });
+    cont.appendChild(ul);
   }
 
-  async function onGuardar() {
-    try {
-      const form = serializeForm();
-      await callAPI('clinica_cloud_save', { form });
-      alert('Pendiente guardado en nube: OK');
-      await onListar();
-    } catch (e) {
-      alert('No se pudo guardar en la nube:\n' + e.message);
+  async function listarPendientes() {
+    const { ok, data } = await callApi('clinica_list_pending', {});
+    if (!ok) {
+      alert(`No se pudo listar (${data && data.error ? data.error : 'error desconocido'}).`);
+      return;
     }
+    renderPendientes(data.items || data.pendientes || []);
   }
 
-  async function onCerrar() {
-    try {
-      const form = serializeForm();
-      await callAPI('clinica_close', { form });
-      alert('Caso cerrado → hoja “Clínica”: OK');
-      await onListar();
-    } catch (e) {
-      alert('No se pudo cerrar el caso:\n' + e.message);
+  async function guardarNube() {
+    const payload = getFormData();
+    const { ok, data } = await callApi('clinica_cloud_save', payload);
+    if (!ok) {
+      alert(`No se pudo guardar en la nube: ${data && data.error ? data.error : 'error'}`);
+      return;
     }
+    alert('Pendiente guardado: OK');
+    await listarPendientes();
   }
 
-  async function onListar() {
-    try {
-      const r = await callAPI('clinica_list_pending', {});
-      renderLista(r.items || []);
-    } catch (e) {
-      contLista.innerHTML = `<p>No se pudo listar (${e.message}).</p>`;
+  async function cerrarCaso() {
+    const payload = getFormData();
+    const { ok, data } = await callApi('clinica_close', payload);
+    if (!ok) {
+      alert(`No se pudo cerrar el caso: ${data && data.error ? data.error : 'error'}`);
+      return;
     }
+    alert('Caso cerrado → hoja "Clínica": OK');
   }
 
-  // IMPORTANTÍSIMO: atar eventos (si no existen los elementos, alertamos)
-  if (!btnCerrar || !btnGuardar || !btnListar || !contLista) {
-    alert('Faltan IDs en el HTML (btnCerrarCaso / btnGuardarNube / btnListarNube / listaPendientes). Corrige el app.html');
-    return;
-  }
+  document.addEventListener('DOMContentLoaded', () => {
+    const btnCerrar = $('#btnCerrarCaso');
+    const btnGuardar = $('#btnGuardarNube');
+    const btnListar = $('#btnListarNube');
 
-  btnGuardar.addEventListener('click', onGuardar);
-  btnCerrar.addEventListener('click', onCerrar);
-  btnListar.addEventListener('click', onListar);
+    if (btnCerrar) btnCerrar.addEventListener('click', cerrarCaso);
+    if (btnGuardar) btnGuardar.addEventListener('click', guardarNube);
+    if (btnListar) btnListar.addEventListener('click', listarPendientes);
 
-  // auto-listar al cargar
-  document.addEventListener('DOMContentLoaded', onListar);
+    // Carga inicial de pendientes
+    listarPendientes();
+  });
 })();
