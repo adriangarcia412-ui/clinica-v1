@@ -1,174 +1,139 @@
 (() => {
-  const API = '/api/gsheet';
+  const API = "/api/gsheet"; // nuestro proxy
 
+  // ===== util: fetch tolerante =====
   async function postJSON(action, data) {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 20000); // 20s timeout
+    const res = await fetch(`${API}?action=${encodeURIComponent(action)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, data }),
+    });
 
-    let res;
+    // El proxy ya garantiza JSON; por robustez, hacemos plan B:
+    let txt = await res.text();
     try {
-      res = await fetch(API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, data }),
-        signal: ctrl.signal,
-      });
-    } catch (e) {
-      clearTimeout(t);
-      throw new Error(`No hay respuesta del proxy: ${e.message || e}`);
-    }
-    clearTimeout(t);
-
-    // Intento 1: JSON directo
-    try {
-      const j = await res.json();
-      if (!j.ok) throw new Error(j.error || 'Error desconocido');
-      return j;
-    } catch (e1) {
-      // Intento 2: leer texto y transformar a error legible
-      try {
-        const txt = await res.text();
-        // ¿parece JSON?
-        const trimmed = (txt || '').trim();
-        if (trimmed.startsWith('{')) {
-          try {
-            const j2 = JSON.parse(trimmed);
-            if (!j2.ok) throw new Error(j2.error || 'Error desconocido');
-            return j2;
-          } catch { /* sigue abajo */ }
-        }
-        throw new Error(txt.slice(0, 400) || 'Respuesta inválida de GAS');
-      } catch (e2) {
-        throw new Error(e2.message || 'Respuesta inválida');
-      }
+      return JSON.parse(txt);
+    } catch (_) {
+      return res.ok ? { ok: true, message: txt } : { ok: false, error: txt || "Error" };
     }
   }
 
-  const $ = (id) => document.getElementById(id);
-  const val = (id) => $(id)?.value?.trim() || '';
+  // ===== util: UI =====
+  function val(id) {
+    return document.getElementById(id)?.value?.trim() || "";
+  }
 
   function collectData() {
+    // Si el formulario define window.clinicaFormData(), úsalo (compatibilidad)
+    if (typeof window.clinicaFormData === "function") {
+      return window.clinicaFormData();
+    }
+    // Caso base: ids del layout actual
     return {
-      id: val('input-id'),
-      fecha_iso: val('input-fecha') || new Date().toISOString(),
-      nombre: val('input-nombre'),
-      numero_nomina: val('input-nomina'),
-      edad: val('input-edad'),
-      sexo: $('select-sexo')?.value || '',
-      puesto: val('input-puesto'),
-      area_laboral: val('input-area-laboral'),
-      area_incidente: val('input-area-incidente'),
-      zona_cuerpo: val('input-zona'),
-      hemisferio: val('input-hemisferio'),
-      diagnostico: val('input-diagnostico'),
-      exploracion: val('input-exploracion'),
-      motivo: val('input-motivo'),
-      antecedentes: val('input-antecedentes'),
-      clasificacion: val('input-clasificacion'),
-      seguimiento: val('input-seguimiento'),
-      indicaciones: val('input-indicaciones'),
+      id: val("input-id"),
+      fecha_iso: val("input-fecha") || new Date().toISOString(),
+      nombre: val("input-nombre"),
+      numero_nomina: val("input-nomina"),
+      edad: val("input-edad"),
+      sexo: document.getElementById("select-sexo")?.value || "",
+      puesto: val("input-puesto"),
+      area_laboral: val("input-area-laboral"),
+      area_incidente: val("input-area-incidente"),
+      zona_cuerpo: val("input-zona"),
+      hemisferio: val("input-hemisferio"),
+      diagnostico: val("input-diagnostico"),
+      exploracion: val("input-exploracion"),
+      motivo: val("input-motivo"),
+      antecedentes: val("input-antecedentes"),
+      clasificacion: val("input-clasificacion"),
+      seguimiento: val("input-seguimiento"),
+      indicaciones: val("input-indicaciones"),
     };
   }
 
-  function alertOK(msg) { window.alert(msg); }
-  function alertErr(e) { window.alert(`No se pudo completar la operación: ${e.message || e}`); }
+  function toast(msg) {
+    alert(msg);
+  }
 
-  function escapeHtml(s=''){return s.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
+  // ===== Render lista pendientes =====
+  const listContainer = document.getElementById("cloud-list") || document.createElement("div");
+  if (!listContainer.id) {
+    listContainer.id = "cloud-list";
+    // intenta montarlo en el bloque de “Casos en la nube (pendientes)”
+    const host = document.getElementById("cloud-block");
+    if (host) host.appendChild(listContainer);
+    else document.body.appendChild(listContainer);
+  }
 
-  function renderPending(items) {
-    const list = $('pending-list');
-    const empty = $('pending-empty');
+  function renderEmpty(message) {
+    listContainer.innerHTML =
+      `<div style="color:#475569">${message || "No hay pendientes en la nube."}</div>`;
+  }
 
-    if (!Array.isArray(items) || items.length === 0) {
-      list.style.display = 'none';
-      empty.style.display = '';
-      list.innerHTML = '';
-      return;
+  function renderList(items) {
+    if (!Array.isArray(items) || !items.length) {
+      return renderEmpty("No hay pendientes en la nube.");
     }
-
-    empty.style.display = 'none';
-    list.style.display = '';
-    list.innerHTML = items.map((it, idx) => {
-      const titulo = it?.id || `(sin ID) #${idx+1}`;
-      const fecha  = it?.fecha_iso || '';
-      return `
-        <li class="item">
-          <div class="row">
-            <div>
-              <strong>${escapeHtml(titulo)}</strong>
-              <br><small>${escapeHtml(fecha)}</small>
+    const rows = items
+      .map((r) => {
+        const id = r.id || r.ID || "(sin ID)";
+        const nombre = r.nombre || r.Nombre || "";
+        const fecha = r.fecha_iso || r.Fecha || "";
+        return `
+          <div class="card" style="margin:8px 0; padding:12px; border:1px solid #e2e8f0; border-radius:12px">
+            <div><b>ID:</b> ${id}</div>
+            <div><b>Nombre:</b> ${nombre}</div>
+            <div><b>Fecha:</b> ${fecha}</div>
+            <div style="margin-top:8px; display:flex; gap:8px;">
+              <button data-del="${id}" class="btn btn-secondary">Eliminar</button>
             </div>
-            <div>
-              <button data-id="${encodeURIComponent(it.id||'')}" class="btn btn-ghost btn-del">Eliminar</button>
-              <button data-id="${encodeURIComponent(it.id||'')}" class="btn btn-secondary btn-send">Enviar</button>
-            </div>
-          </div>
-        </li>`;
-    }).join('');
+          </div>`;
+      })
+      .join("");
+    listContainer.innerHTML = rows;
 
-    list.querySelectorAll('.btn-del').forEach(b=>{
-      b.onclick = async () => {
-        try {
-          const id = decodeURIComponent(b.dataset.id||'');
-          await postJSON('clinica_delete_pending', { id });
-          await fetchPending();
-        } catch(e){ alertErr(e); }
-      };
-    });
-    list.querySelectorAll('.btn-send').forEach(b=>{
-      b.onclick = async () => {
-        try {
-          const id = decodeURIComponent(b.dataset.id||'');
-          await postJSON('clinica_send_pending', { id });
-          await fetchPending();
-        } catch(e){ alertErr(e); }
+    // enlazar eliminar
+    listContainer.querySelectorAll("button[data-del]").forEach((btn) => {
+      btn.onclick = async () => {
+        const id = btn.getAttribute("data-del");
+        const r = await postJSON("clinica_delete_pending", { id });
+        if (!r.ok) return toast("No se pudo eliminar: " + (r.error || r.message || "Error"));
+        await loadList();
       };
     });
   }
 
-  async function fetchPending() {
-    try {
-      const r = await postJSON('clinica_list_pending', {});
-      renderPending(r.items || []);
-    } catch(e) {
-      $('pending-empty').innerText = `No se pudo listar (${e.message}).`;
-      $('pending-list').style.display = 'none';
-      $('pending-empty').style.display = '';
-    }
+  async function loadList() {
+    const r = await postJSON("clinica_list_pending", {});
+    if (!r.ok) return renderEmpty(r.error || r.message || "No se pudo listar.");
+    renderList(r.items || r.data || []);
   }
 
-  async function saveCloud() {
-    try {
-      const payload = collectData();
-      await postJSON('clinica_cloud_save', payload);
-      alertOK('Guardado en la nube: OK');
-      await fetchPending();
-    } catch(e) { alertErr(e); }
+  // ===== Botones =====
+  const btnSaveCloud = document.getElementById("btn-cloud-save");
+  if (btnSaveCloud) {
+    btnSaveCloud.onclick = async () => {
+      const data = collectData();
+      const r = await postJSON("clinica_cloud_save", data);
+      if (!r.ok) return toast("No se pudo guardar en la nube: " + (r.error || r.message || "Error"));
+      toast("Guardado en nube: OK");
+      await loadList();
+    };
   }
 
-  async function closeCase() {
-    try {
-      const payload = collectData();
-      await postJSON('clinica_close', payload);
-      alertOK('Caso cerrado → hoja “Clínica”');
-    } catch(e) { alertErr(e); }
+  const btnClose = document.getElementById("btn-close");
+  if (btnClose) {
+    btnClose.onclick = async () => {
+      const data = collectData();
+      const r = await postJSON("clinica_close", data);
+      if (!r.ok) return toast("No se pudo cerrar el caso: " + (r.error || r.message || "Error"));
+      toast("Caso cerrado → hoja Clínica: OK");
+    };
   }
 
-  function bind() {
-    const btnClose = $('btn-close');
-    const btnCloud = $('btn-cloud-save');
-    const btnRefresh = $('btn-refresh-list');
+  const btnRefresh = document.getElementById("btn-cloud-refresh");
+  if (btnRefresh) btnRefresh.onclick = loadList;
 
-    if (btnClose) btnClose.onclick = closeCase;
-    if (btnCloud) btnCloud.onclick = saveCloud;
-    if (btnRefresh) btnRefresh.onclick = fetchPending;
-
-    fetchPending().catch(()=>{});
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bind);
-  } else {
-    bind();
-  }
+  // Carga inicial de la lista
+  loadList();
 })();
