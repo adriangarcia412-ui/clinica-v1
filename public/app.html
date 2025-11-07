@@ -1,18 +1,154 @@
-<!-- … tus campos … -->
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Registro Clínico</title>
+  <style>
+    :root { --gap: 12px; --accent:#0ea5e9; }
+    html,body{margin:0;padding:0;background:#f7fafc;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue','Noto Sans',Arial,'Apple Color Emoji','Segoe UI Emoji';color:#0f172a}
+    .container{max-width:1200px;margin:32px auto;padding:0 16px}
+    h1{margin:0 0 8px 0;font-size:28px}
+    .badge{display:inline-block;background:#e2f2fd;color:#075985;border:1px solid #bae6fd;padding:2px 8px;border-radius:999px;font-size:12px;margin-left:8px}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--gap)}
+    .col-12{grid-column:span 12}
+    .col-6{grid-column:span 6}
+    .col-5{grid-column:span 5}
+    .col-4{grid-column:span 4}
+    .col-3{grid-column:span 3}
+    label{display:block;font-size:13px;color:#334155;margin-bottom:6px}
+    input,select,textarea{
+      width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;
+      padding:10px 12px;background:#fff;outline:none;font-size:14px
+    }
+    textarea{min-height:80px;resize:vertical}
+    input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px #bae6fd}
+    .actions{display:flex;gap:var(--gap);margin-top:18px;flex-wrap:wrap}
+    .btn{border:none;border-radius:12px;padding:12px 18px;font-weight:600;cursor:pointer}
+    .btn-primary{background:var(--accent);color:#fff}
+    .btn-secondary{background:#1d4ed8;color:#fff}
+    .btn-ghost{background:#e2e8f0;color:#0f172a}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Registro Clínico <span class="badge">v1</span></h1>
 
-<div class="col-12 actions">
-  <button id="btn-close" class="btn btn-primary">Cerrar caso → hoja “Clínica”</button>
-  <button id="btn-cloud-save" class="btn btn-secondary">Guardar en la nube</button>
-</div>
+    <div class="card">
+      <div class="grid">
+        <div class="col-3">
+          <label for="input-id">ID</label>
+          <input id="input-id" type="text" placeholder="ID o folio">
+        </div>
 
-<!-- Bloque de pendientes (debajo del formulario) -->
-<div id="cloud-block" class="card" style="margin-top:16px;">
-  <h2>Casos en la nube (pendientes) <span class="badge">Nube temporal</span></h2>
-  <div style="margin-bottom:12px">
-    <button id="btn-cloud-refresh" class="btn btn-secondary">Actualizar lista</button>
+        <div class="col-4">
+          <label for="input-fecha">Fecha/Hora ISO</label>
+          <input id="input-fecha" type="text" placeholder="auto (ISO 8601)">
+        </div>
+
+        <div class="col-5">
+          <label for="input-nombre">Nombre</label>
+          <input id="input-nombre" type="text" placeholder="Nombre y apellidos">
+        </div>
+
+        <div class="col-3">
+          <label for="input-nomina">Número de nómina</label>
+          <input id="input-nomina" type="text" placeholder="Ej. A12345">
+        </div>
+
+        <div class="col-3">
+          <label for="input-edad">Edad</label>
+          <input id="input-edad" type="text" placeholder="Ej. 34">
+        </div>
+
+        <div class="col-3">
+          <label for="select-sexo">Sexo</label>
+          <select id="select-sexo">
+            <option value="">Selecciona…</option>
+            <option value="M">M</option>
+            <option value="F">F</option>
+          </select>
+        </div>
+
+        <div class="col-3">
+          <label for="input-puesto">Puesto</label>
+          <input id="input-puesto" type="text">
+        </div>
+
+        <div class="col-6">
+          <label for="input-area-laboral">Área laboral</label>
+          <input id="input-area-laboral" type="text">
+        </div>
+
+        <div class="col-6">
+          <label for="input-area-incidente">Área del incidente</label>
+          <input id="input-area-incidente" type="text">
+        </div>
+
+        <div class="col-6">
+          <label for="input-zona">Zona del cuerpo afectada</label>
+          <input id="input-zona" type="text" placeholder="Ej. mano derecha">
+        </div>
+
+        <div class="col-6">
+          <label for="input-hemisferio">Hemisferio</label>
+          <input id="input-hemisferio" type="text" placeholder="Izquierdo / Derecho / NA">
+        </div>
+
+        <div class="col-6">
+          <label for="input-diagnostico">Diagnóstico</label>
+          <input id="input-diagnostico" type="text">
+        </div>
+
+        <div class="col-6">
+          <label for="input-exploracion">Exploración</label>
+          <input id="input-exploracion" type="text">
+        </div>
+
+        <div class="col-6">
+          <label for="input-motivo">Motivo</label>
+          <input id="input-motivo" type="text">
+        </div>
+
+        <div class="col-6">
+          <label for="input-antecedentes">Antecedentes</label>
+          <input id="input-antecedentes" type="text">
+        </div>
+
+        <div class="col-6">
+          <label for="input-clasificacion">Clasificación del accidente</label>
+          <input id="input-clasificacion" type="text" placeholder="FAT/LTI/MTC/FAC/UA&C">
+        </div>
+
+        <div class="col-6">
+          <label for="input-seguimiento">Seguimiento (cita)</label>
+          <input id="input-seguimiento" type="text" placeholder="dd/mm/aaaa o texto">
+        </div>
+
+        <div class="col-12">
+          <label for="input-indicaciones">Indicaciones / Tratamiento</label>
+          <textarea id="input-indicaciones" placeholder="Medicamentos, reposo, recomendaciones…"></textarea>
+        </div>
+
+        <div class="col-12 actions">
+          <button id="btn-close" class="btn btn-primary">Cerrar caso → hoja “Clínica”</button>
+          <button id="btn-cloud-save" class="btn btn-secondary">Guardar en la nube</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bloque de pendientes debajo del formulario -->
+    <div id="cloud-block" class="card" style="margin-top:16px;">
+      <h2>Casos en la nube (pendientes) <span class="badge">Nube temporal</span></h2>
+      <div style="margin-bottom:12px">
+        <button id="btn-cloud-refresh" class="btn btn-ghost">Actualizar lista</button>
+      </div>
+      <div id="cloud-list"><!-- aquí se renderiza la lista --></div>
+    </div>
   </div>
-  <div id="cloud-list"><!-- aquí se renderiza la lista --></div>
-</div>
 
-<!-- Bridge -->
-<script src="/clinica-bridge.js"></script>
+  <!-- Bridge: engancha los botones al backend vía /api/gsheet -->
+  <script src="/clinica-bridge.js"></script>
+</body>
+</html>
