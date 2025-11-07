@@ -12,9 +12,9 @@
     .badge{display:inline-block;background:#e2f2fd;color:#075985;border:1px solid #bae6fd;padding:2px 8px;border-radius:999px;font-size:12px;margin-left:8px}
     .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--gap)}
     .col-6{grid-column:span 6}
+    .col-5{grid-column:span 5}
     .col-4{grid-column:span 4}
     .col-3{grid-column:span 3}
-    .col-5{grid-column:span 5}
     .col-12{grid-column:span 12}
     label{display:block;font-size:13px;color:#334155;margin-bottom:6px}
     input,select,textarea{
@@ -139,8 +139,8 @@
         </div>
 
         <div class="col-12 actions">
-          <button id="btn-close" class="btn btn-primary">Cerrar caso → hoja “Clínica”</button>
-          <button id="btn-cloud" class="btn btn-secondary">Guardar en la nube</button>
+          <button id="btn-close" class="btn btn-primary" onclick="closeCase()">Cerrar caso → hoja “Clínica”</button>
+          <button id="btn-cloud" class="btn btn-secondary" onclick="cloudSave()">Guardar en la nube</button>
         </div>
       </div>
     </div>
@@ -149,20 +149,21 @@
     <div class="card cloud" id="cloud-card">
       <h2>Casos en la nube (pendientes) <span class="tag">Nube temporal</span></h2>
       <div class="actions" style="margin-top:0">
-        <button id="btn-refresh" class="btn btn-ghost">Actualizar lista</button>
+        <button id="btn-refresh" class="btn btn-ghost" onclick="cloudList()">Actualizar lista</button>
       </div>
       <div id="cloud-list" class="list">No hay pendientes en la nube.</div>
     </div>
   </div>
 
-  <!-- Bridge: engancha botones de “Cerrar caso” y lectura del formulario -->
-  <script src="/clinica-bridge.js"></script>
-
-  <!-- Lógica ligera para la nube (usa /api/gsheet → GAS) -->
+  <!-- ========== JS mínimo y autosuficiente ========== -->
   <script>
-    // Usa la misma lectura que el bridge: si existe window.clinicaFormData(), úsala.
+    // Diagnóstico rápido de errores
+    window.onerror = function(msg, src, line, col) {
+      alert("Error JS: " + msg + " (" + (src||"") + ":" + (line||"?") + ")");
+    };
+
+    // Lectura del formulario (mismos IDs que ya usas)
     function getFormData() {
-      if (typeof window.clinicaFormData === "function") return window.clinicaFormData();
       const val = id => document.getElementById(id)?.value?.trim() || "";
       return {
         id: val("input-id"),
@@ -195,11 +196,20 @@
       return res.json();
     }
 
+    async function closeCase() {
+      try {
+        const j = await callApi("clinica_close", getFormData());
+        if (!j.ok) throw new Error(j.error || "No se pudo cerrar el caso");
+        alert("Caso cerrado → hoja “Clínica”: OK");
+      } catch (e) {
+        alert("Fallo al cerrar caso: " + e.message);
+      }
+    }
+
     async function cloudSave() {
       try {
-        const data = getFormData();
-        const j = await callApi("clinica_cloud_save", data);
-        if (!j.ok) throw new Error(j.error || "Fallo al guardar");
+        const j = await callApi("clinica_cloud_save", getFormData());
+        if (!j.ok) throw new Error(j.error || "No se pudo guardar");
         alert("Guardado en la nube: OK");
         await cloudList();
       } catch (e) {
@@ -230,11 +240,11 @@
         box.appendChild(div);
       });
 
-      // Bind eliminar
+      // bind eliminar
       box.querySelectorAll("[data-del]").forEach(btn => {
         btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-del");
-          if (!confirm(`¿Eliminar pendiente ${id}?`)) return;
+          if (!confirm("¿Eliminar pendiente " + id + "?")) return;
           try {
             const j = await callApi("clinica_delete_pending", { id });
             if (!j.ok) throw new Error(j.error || "No se pudo eliminar");
@@ -257,10 +267,7 @@
       }
     }
 
-    document.getElementById("btn-cloud").addEventListener("click", cloudSave);
-    document.getElementById("btn-refresh").addEventListener("click", cloudList);
-
-    // Carga inicial de la lista
+    // Carga inicial del listado
     cloudList();
   </script>
 </body>
