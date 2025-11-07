@@ -1,68 +1,94 @@
-// api/gsheet.js — Proxy único hacia Google Apps Script (GAS) para la app "Clínica".
-// Inspirado en el proxy de SOC-V3. Si cambias el GAS, solo ajusta la URL de abajo
-// o bien configúrala como variable de entorno (Vercel → Settings → Environment Variables).
+// api/gsheet.js — Proxy único hacia Google Apps Script (GAS) para la app "clínica".
+// Si cambias tu GAS, solo ajusta la URL de abajo o configúrala como variable de entorno
+// (Vercel → Settings → Environment Variables) con el nombre GAS_CLINICA_URL.
 
-// 1) URL del Web App de Google Apps Script (publicado como "Anyone")
-//    PRIORIDAD: variable de entorno GAS_CLINICA_URL; si no existe, usa fallback.
 const GAS_URL =
   process.env.GAS_CLINICA_URL ||
-  // Fallback temporal (puedes reemplazar por el de Clínica cuando lo tengas a mano)
-  "https://script.google.com/macros/s/AKfycbzMZl3qsIIIwIUAPGUk1JYt1CuPP3BI4Aq9WK5ZlAslrgNg4PPD5aQEcSe07Ce43stkLQ/exec";
+  // Fallback temporal; reemplázala por tu Web App (Deploy → Anyone):
+  "https://script.google.com/macros/s/AKfycbycM2l3qsITIWlUAPGUk1JYt1CuPP3BlA4q9Wk5Z1AslrgNg4PPD5aQEcSe07Ce43stkLQ/exec";
 
-// 2) Mapa de acciones admitidas (según lo que dispara el front)
-const ALLOWED_ACTIONS = new Set([
-  "clinica_close",          // cerrar caso → hoja “Clínica”
-  "clinica_cloud_save",     // guardar en nube temporal
-  "clinica_list_pending",   // listar pendientes
-  "clinica_delete_pending"  // eliminar pendiente
+// Acciones permitidas (seguridad básica)
+const ALLOWED = new Set([
+  "clinica_close",
+  "clinica_cloud_save",
+  "clinica_list_pending",
+  "clinica_delete_pending",
+  "clinica_send_pending",
+  "ping", // utilitario
 ]);
 
-// 3) Utilidad para formatear respuesta de error
-function err(message, status = 400) {
-  return new Response(JSON.stringify({ ok: false, error: message }), {
-    status,
-    headers: { "Content-Type": "application/json" }
-  });
+export default async function handler(req, res) {
+  // CORS/OPTIONS mínimo
+  if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    return res.status(200).end();
+  }
+  res.setHeader("Access-Control-Allow-Origin", "*");
+
+  try {
+    if (req.method === "GET") {
+      const action = (req.query.action || "ping") + "";
+      if (!ALLOWED.has(action)) return bad(res, 400, `Acción no permitida: ${action}`);
+      const out = await callGAS({ action, data: {} });
+      return okOrError(res, out);
+    }
+
+    if (req.method !== "POST") {
+      return bad(res, 405, "Método no permitido");
+    }
+
+    const { action, data } = req.body || {};
+    if (!action || !ALLOWED.has(action + "")) {
+      return bad(res, 400, `Acción no permitida: ${action}`);
+    }
+
+    const out = await callGAS({ action, data: data || {} });
+    return okOrError(res, out);
+  } catch (e) {
+    return bad(res, 500, e.message || "Fallo desconocido");
+  }
 }
 
-// 4) Handler genérico: recibe { action, data } y reenvía a GAS.
-export default async function handler(req) {
+async function callGAS(payload) {
+  // Envía SIEMPRE JSON al GAS; si GAS responde texto/HTML, lo envolvemos.
+  let resp;
   try {
-    if (req.method !== "POST") {
-      return err("Use POST", 405);
-    }
-
-    const body = await req.json().catch(() => ({}));
-    const action = body?.action;
-
-    if (!action) return err("Falta 'action'");
-    if (!ALLOWED_ACTIONS.has(action)) return err(`Acción desconocida: ${action}`);
-
-    // Reenvía a GAS con el mismo formato que usamos en SOC-V3:
-    // { action, payload: {...}, source: "clinica-v1" }
-    const gasResp = await fetch(GAS_URL, {
+    resp = await fetch(GAS_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action,
-        payload: body?.data || {},
-        source: "clinica-v1"
-      })
-    });
-
-    // GAS debe devolver JSON con { ok: true/false, ... }
-    if (!gasResp.ok) return err(`GAS HTTP ${gasResp.status}`, 502);
-
-    const j = await gasResp.json().catch(() => null);
-    if (!j || typeof j.ok === "undefined") {
-      return err("Respuesta inválida de GAS", 502);
-    }
-
-    return new Response(JSON.stringify(j), {
-      status: 200,
-      headers: { "Content-Type": "application/json" }
+      body: JSON.stringify(payload),
     });
   } catch (e) {
-    return err(e?.message || "Fallo inesperado", 500);
+    return { ok: false, error: `No se pudo contactar GAS: ${e.message || e}` };
   }
+
+  // 1) Intentar JSON
+  try {
+    const j = await resp.json();
+    return j;
+  } catch {
+    // 2) Intentar texto
+    try {
+      const txt = await resp.text();
+      const trimmed = (txt || "").trim();
+      if (trimmed.startsWith("{")) {
+        try { return JSON.parse(trimmed); } catch {}
+      }
+      // Devolver como error claro
+      return { ok: false, error: trimmed.slice(0, 800) || "Respuesta inválida de GAS" };
+    } catch {
+      return { ok: false, error: "Respuesta ilegible de GAS" };
+    }
+  }
+}
+
+function okOrError(res, out) {
+  if (out && out.ok) return res.status(200).json(out);
+  return bad(res, 200, (out && out.error) || "Error desconocido de GAS");
+}
+
+function bad(res, code, msg) {
+  return res.status(code).json({ ok: false, error: msg });
 }
