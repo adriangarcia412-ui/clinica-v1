@@ -1,101 +1,87 @@
 // api/gsheet.js
 // Proxy único hacia Google Apps Script (GAS) para la app "clínica".
-// PRIORIDAD: variable de entorno en Vercel: GAS_CLINICA_URL (URL del Web App "exec" publicado como Anyone).
+// Requiere variable de entorno GAS_CLINICA_URL en Vercel con el URL .../exec
+// Si Vercel no tiene esa variable, puedes hardcodear temporalmente en GAS_URL.
 
-export const config = { runtime: "edge" };
+const GAS_URL = process.env.GAS_CLINICA_URL || ""; // <-- NO hardcodear aquí en producción
 
-// 1) URL del GAS
-const GAS_URL =
-  process.env.GAS_CLINICA_URL ||
-  ""; // sin fallback para forzar a configurar; si quieres, puedes poner aquí un exec válido temporal
-
-// 2) Acciones admitidas (igual que en SOC-V3 estilo)
+// Acciones permitidas; evita que te llamen cualquier cosa.
 const ALLOWED = new Set([
-  "clinica_close",
   "clinica_cloud_save",
   "clinica_list_pending",
-  "clinica_delete_pending",
+  "clinica_close"
 ]);
 
-export default async function handler(req) {
+/**
+ * Convierte el ReadableStream en string una sola vez.
+ */
+async function readTextOnce(res) {
   try {
-    const { searchParams } = new URL(req.url);
-    const action = searchParams.get("action") || "";
-
-    if (!ALLOWED.has(action)) {
-      return json({ ok: false, error: `Acción no permitida: ${action}` }, 400);
-    }
-
-    if (!GAS_URL) {
-      return json(
-        {
-          ok: false,
-          error:
-            "Falta GAS_CLINICA_URL en variables de entorno de Vercel. Configúrala con el URL de despliegue 'exec' del Web App de Google.",
-        },
-        500
-      );
-    }
-
-    // Leemos el body del request UNA sola vez
-    const incomingText = await req.text();
-
-    // Reenviamos al GAS (POST) con query ?action=...
-    const gasRes = await fetch(`${GAS_URL}?action=${encodeURIComponent(action)}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: incomingText || "{}",
-      redirect: "follow",
-    });
-
-    const gasText = await gasRes.text();
-
-    // Si GAS devuelve HTML, devolvemos error legible
-    if (gasText.trim().startsWith("<!DOCTYPE") || gasText.trim().startsWith("<html")) {
-      const hint =
-        "GAS devolvió una página HTML (posible error de Google). Revisa que el Web App esté publicado como 'Anyone' y activo y que GAS_CLINICA_URL sea el 'exec' vigente.";
-      return json(
-        {
-          ok: false,
-          error: hint,
-          _htmlSample: gasText.slice(0, 200),
-        },
-        502
-      );
-    }
-
-    // Intentamos parsear JSON
-    let gasJson;
-    try {
-      gasJson = JSON.parse(gasText);
-    } catch {
-      return json(
-        {
-          ok: false,
-          error: "Respuesta no JSON desde GAS.",
-          _raw: gasText.slice(0, 300),
-        },
-        502
-      );
-    }
-
-    // Normalizamos salida
-    if (!gasRes.ok || gasJson?.ok === false) {
-      return json(
-        { ok: false, error: gasJson?.error || `Error HTTP ${gasRes.status}` },
-        gasRes.ok ? 200 : gasRes.status
-      );
-    }
-
-    return json({ ok: true, ...gasJson }, 200);
-  } catch (err) {
-    return json({ ok: false, error: String(err?.message || err) }, 500);
+    return await res.text();
+  } catch (e) {
+    return "";
   }
 }
 
-function json(obj, status = 200) {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8" },
-  });
+/**
+ * Respuesta JSON uniforme al front.
+ */
+function sendJSON(res, status, body) {
+  res.status(status).setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify(body));
+}
+
+/**
+ * Extrae hasta 800 caracteres para diagnóstico si GAS devuelve HTML.
+ */
+function excerpt(html) {
+  return (html || "").slice(0, 800);
+}
+
+export default async function handler(req, res) {
+  try {
+    if (!GAS_URL) {
+      return sendJSON(res, 500, {
+        ok: false,
+        error: "Falta GAS_CLINICA_URL en variables de entorno de Vercel. Configura con el URL /exec del Web App de Google."
+      });
+    }
+
+    const { action } = req.query;
+    if (!action || !ALLOWED.has(action)) {
+      return sendJSON(res, 400, { ok: false, error: `Acción no permitida: ${action || "(vacía)"}` });
+    }
+
+    // El body del front será JSON.
+    const payload = req.method === "POST" ? req.body : null;
+
+    // Reenvía a GAS
+    const gasRes = await fetch(GAS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, payload })
+    });
+
+    const ct = (gasRes.headers.get("content-type") || "").toLowerCase();
+
+    // GAS debe devolver JSON. Si no, devolvemos diagnóstico con un recorte de HTML.
+    if (!ct.includes("application/json")) {
+      const raw = await readTextOnce(gasRes);
+      return sendJSON(res, 502, {
+        ok: false,
+        error: "GAS devolvió una página HTML (posible error de Google o del despliegue). Verifica que el Web App esté publicado como 'Anyone' y activo.",
+        html_excerpt: excerpt(raw)
+      });
+    }
+
+    // JSON válido desde GAS
+    const data = await gasRes.json();
+    return sendJSON(res, 200, data);
+
+  } catch (err) {
+    return sendJSON(res, 500, {
+      ok: false,
+      error: `Proxy error: ${err?.message || err}`
+    });
+  }
 }
