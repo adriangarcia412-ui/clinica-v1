@@ -1,127 +1,138 @@
-// public/clinica-bridge.js
+/* public/clinica-bridge.js
+   Conecta el formulario con el proxy /api/gsheet (Vercel) y éste con GAS.
+   Acciones GAS: CLOSE_CASE, SAVE_PENDING, LIST_PENDING, DELETE_PENDING.
+*/
+
 (function () {
-  const $ = (sel) => document.querySelector(sel);
-  const statusEl = $("#cloud-status");
-  const listEl = $("#cloud-list");
+  const API_BASE = (typeof window !== "undefined" && window.CLINICA_API_BASE) || "/api/gsheet";
 
-  function showAlert(msg) {
-    try {
-      if (typeof msg === "string" && msg.startsWith("{")) {
-        const j = JSON.parse(msg);
-        if (j && j.error) msg = j.error;
-      }
-    } catch (_) {}
-    if (typeof msg === "string" && msg.includes("<!DOCTYPE")) {
-      msg = 'GAS devolvió una página HTML (posible error de Google / Web App no publicado como "Anyone").';
-    }
-    alert(msg);
-  }
+  // ---- helpers ----
+  const $ = (id) => document.getElementById(id);
+  const msg = (t) => alert(t);
 
-  function getVal(id) { const el = document.getElementById(id); return el ? el.value.trim() : ""; }
+  function val(id) { const el = $(id); return el ? el.value.trim() : ""; }
 
-  function collectForm() {
+  function buildPayload() {
     return {
-      id: getVal("input-id"),
-      fecha_iso: getVal("input-fecha"),
-      nombre: getVal("input-nombre"),
-      nomina: getVal("input-nomina"),
-      edad: getVal("input-edad"),
-      sexo: (document.getElementById("select-sexo") || { value: "" }).value,
-      puesto: getVal("input-puesto"),
-      area_laboral: getVal("input-area-laboral"),
-      area_incidente: getVal("input-area-incidente"),
-      zona_cuerpo: getVal("input-zona"),
-      hemisferio: getVal("input-hemisferio"),
-      diagnostico: getVal("input-diagnostico"),
-      exploracion: getVal("input-exploracion"),
-      motivo: getVal("input-motivo"),
-      antecedentes: getVal("input-antecedentes"),
-      clasificacion: getVal("input-clasificacion"),
-      seguimiento: getVal("input-seguimiento"),
-      indicaciones: getVal("input-indicaciones"),
+      id: val("input-id"),
+      fecha_iso: val("input-fecha"),
+      nombre: val("input-nombre"),
+      nomina: val("input-nomina"),
+      edad: val("input-edad"),
+      sexo: $("#select-sexo") ? $("#select-sexo").value : "",
+      puesto: val("input-puesto"),
+      area_laboral: val("input-area-laboral"),
+      area_incidente: val("input-area-incidente"),
+      zona_cuerpo: val("input-zona"),
+      hemisferio: val("input-hemisferio"),
+      diagnostico: val("input-diagnostico"),
+      exploracion: val("input-exploracion"),
+      motivo: val("input-motivo"),
+      antecedentes: val("input-antecedentes"),
+      clasificacion: val("input-clasificacion"),
+      seguimiento: val("input-seguimiento"),
+      indicaciones: val("input-indicaciones"),
     };
   }
 
-  async function callApi(action, payload) {
-    const r = await fetch("/api/gsheet", {
+  async function callProxy(action, data) {
+    // Siempre POST al proxy con ?action=<accion_front>
+    const url = `${API_BASE}?action=${encodeURIComponent(action)}`;
+    const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, payload }),
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(data || {}),
     });
-    const text = await r.text(); // no consumimos dos veces
+
+    // No leer dos veces el body. Leemos una sola vez según content-type:
+    const ct = res.headers.get("content-type") || "";
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(text || `HTTP ${res.status}`);
+    }
+    if (ct.includes("application/json")) {
+      return await res.json();
+    } else {
+      const text = await res.text().catch(() => "");
+      // Cuando GAS devuelve HTML (errores de Google), lo convertimos en error claro
+      throw new Error("GAS devolvió una página HTML (posible error de Google o Web App sin permisos).");
+    }
+  }
+
+  // ---- acciones de UI ----
+  async function onClose() {
     try {
-      return JSON.parse(text);
-    } catch (_) {
-      return { ok: false, error: text };
+      const payload = buildPayload();
+      const r = await callProxy("clinica_close", payload);
+      msg(r?.message || "Caso cerrado: OK");
+      await refreshList(); // refresca la lista abajo
+    } catch (e) {
+      msg(`No se pudo cerrar el caso: ${e.message || e}`);
+    }
+  }
+
+  async function onCloudSave() {
+    try {
+      const payload = buildPayload();
+      const r = await callProxy("clinica_cloud_save", payload);
+      msg(r?.message || "Pendiente guardado: OK");
+      await refreshList();
+    } catch (e) {
+      msg(`No se pudo guardar en la nube: ${e.message || e}`);
     }
   }
 
   function renderList(items) {
-    listEl.innerHTML = "";
-    if (!items || !items.length) {
-      const row = document.createElement("div");
-      row.className = "list-row";
-      row.innerHTML = `<div class="row-col muted">No hay pendientes en la nube.</div>`;
-      listEl.appendChild(row);
+    const ul = $("cloud-list");
+    const status = $("cloud-status");
+    ul.innerHTML = "";
+    if (!Array.isArray(items) || items.length === 0) {
+      status.textContent = "No hay pendientes en la nube.";
       return;
     }
+    status.textContent = "";
     items.forEach((it) => {
-      const row = document.createElement("div");
-      row.className = "list-row";
-      row.innerHTML = `
-        <div class="row-col"><b>${it.id || "(sin ID)"}</b> — ${it.nombre || ""} <span class="muted">${it.fecha_iso || ""}</span></div>
-        <div class="row-actions">
-          <button class="btn-mini" data-del="${it._pending_id}">Eliminar</button>
-        </div>
-      `;
-      listEl.appendChild(row);
-    });
-
-    listEl.querySelectorAll("button[data-del]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const pid = btn.getAttribute("data-del");
-        const res = await callApi("clinica_delete_pending", { pending_id: pid });
-        if (!res.ok) return showAlert(res.error || "No se pudo eliminar.");
-        await refreshList();
-      });
+      const li = document.createElement("li");
+      li.className = "item";
+      const left = document.createElement("div");
+      left.innerHTML = `<strong>${it.id || "(sin ID)"} – ${it.nombre || ""}</strong><div class="muted">${it.fecha_iso || ""}</div>`;
+      const right = document.createElement("div");
+      const del = document.createElement("button");
+      del.className = "btn btn-secondary";
+      del.textContent = "Eliminar";
+      del.onclick = async () => {
+        try {
+          await callProxy("clinica_delete_pending", { id: it.id });
+          await refreshList();
+        } catch (e) {
+          msg(`No se pudo eliminar: ${e.message || e}`);
+        }
+      };
+      right.appendChild(del);
+      li.appendChild(left);
+      li.appendChild(right);
+      ul.appendChild(li);
     });
   }
 
   async function refreshList() {
-    statusEl.textContent = "Cargando…";
-    const res = await callApi("clinica_list_pending", {});
-    if (!res.ok) {
-      renderList([]);
-      return showAlert(res.error || "No se pudo listar.");
+    const status = $("cloud-status");
+    status.textContent = "Cargando…";
+    try {
+      const r = await callProxy("clinica_list_pending", {});
+      renderList(r?.items || []);
+    } catch (e) {
+      status.textContent = `No se pudo listar (${e.message || e}).`;
     }
-    renderList(res.data || []);
   }
 
-  async function onClose() {
-    const data = collectForm();
-    const res = await callApi("clinica_close", data);
-    if (!res.ok) return showAlert(res.error || "No se pudo cerrar el caso.");
-    alert(res.message || "Cerrado OK");
-    await refreshList();
-  }
+  // ---- listeners ----
+  window.addEventListener("DOMContentLoaded", () => {
+    $("btn-close")?.addEventListener("click", (ev) => { ev.preventDefault(); onClose(); });
+    $("btn-cloud")?.addEventListener("click", (ev) => { ev.preventDefault(); onCloudSave(); });
+    $("btn-refresh")?.addEventListener("click", (ev) => { ev.preventDefault(); refreshList(); });
 
-  async function onCloudSave() {
-    const data = collectForm();
-    const res = await callApi("clinica_cloud_save", data);
-    if (!res.ok) return showAlert(res.error || "No se pudo guardar en la nube.");
-    alert(res.message || "Pendiente guardado: OK");
-    await refreshList();
-  }
-
-  document.addEventListener("DOMContentLoaded", () => {
-    const btnClose = document.getElementById("btn-close");
-    const btnCloud = document.getElementById("btn-cloud");
-    const btnRefresh = document.getElementById("btn-refresh");
-
-    if (btnClose) btnClose.addEventListener("click", onClose);
-    if (btnCloud) btnCloud.addEventListener("click", onCloudSave);
-    if (btnRefresh) btnRefresh.addEventListener("click", refreshList);
-
+    // carga inicial
     refreshList();
   });
 })();
