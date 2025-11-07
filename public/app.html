@@ -11,11 +11,10 @@
     h1{margin:0 0 8px 0;font-size:28px}
     .badge{display:inline-block;background:#e2f2fd;color:#075985;border:1px solid #bae6fd;padding:2px 8px;border-radius:999px;font-size:12px;margin-left:8px}
     .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--gap)}
-    .col-12{grid-column:span 12}
     .col-6{grid-column:span 6}
-    .col-5{grid-column:span 5}
     .col-4{grid-column:span 4}
     .col-3{grid-column:span 3}
+    .col-12{grid-column:span 12}
     label{display:block;font-size:13px;color:#334155;margin-bottom:6px}
     input,select,textarea{
       width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;
@@ -23,18 +22,22 @@
     }
     textarea{min-height:80px;resize:vertical}
     input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px #bae6fd}
-    .actions{display:flex;gap:var(--gap);margin-top:18px;flex-wrap:wrap}
+    .actions{display:flex;gap:var(--gap);margin-top:18px}
     .btn{border:none;border-radius:12px;padding:12px 18px;font-weight:600;cursor:pointer}
     .btn-primary{background:var(--accent);color:#fff}
-    .btn-secondary{background:#1d4ed8;color:#fff}
-    .btn-ghost{background:#e2e8f0;color:#0f172a}
+    .btn-secondary{background:#e2e8f0;color:#0f172a}
     .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px}
+    .muted{color:#64748b}
+    .list{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+    .li{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Registro Clínico <span class="badge">v1</span></h1>
 
+    <!-- ======= TU FORMULARIO (SIN CAMBIOS EN CAMPOS/IDS) ======= -->
     <div class="card">
       <div class="grid">
         <div class="col-3">
@@ -133,22 +136,134 @@
 
         <div class="col-12 actions">
           <button id="btn-close" class="btn btn-primary">Cerrar caso → hoja “Clínica”</button>
-          <button id="btn-cloud-save" class="btn btn-secondary">Guardar en la nube</button>
+          <button id="btn-cloud" class="btn btn-secondary">Guardar en la nube</button>
         </div>
       </div>
     </div>
 
-    <!-- Bloque de pendientes debajo del formulario -->
-    <div id="cloud-block" class="card" style="margin-top:16px;">
-      <h2>Casos en la nube (pendientes) <span class="badge">Nube temporal</span></h2>
-      <div style="margin-bottom:12px">
-        <button id="btn-cloud-refresh" class="btn btn-ghost">Actualizar lista</button>
+    <!-- ======= Casos en la nube (pendientes) ======= -->
+    <div class="card" style="margin-top:18px">
+      <div class="row">
+        <h2 style="margin:0">Casos en la nube (pendientes)</h2>
+        <span class="badge">Nube temporal</span>
       </div>
-      <div id="cloud-list"><!-- aquí se renderiza la lista --></div>
+      <div class="row" style="margin-top:10px">
+        <button id="btn-refresh" class="btn btn-secondary">Actualizar lista</button>
+        <span id="cloud-msg" class="muted"></span>
+      </div>
+      <div id="cloud-list" class="list"></div>
     </div>
   </div>
 
-  <!-- Bridge: engancha los botones al backend vía /api/gsheet -->
-  <script src="/clinica-bridge.js"></script>
+  <script>
+    // === Helpers front ===
+    function valueOf(id){ return document.getElementById(id)?.value?.trim() || ""; }
+
+    function collectClinicaData(){
+      return {
+        id: valueOf("input-id"),
+        fecha_iso: valueOf("input-fecha") || new Date().toISOString(),
+        nombre: valueOf("input-nombre"),
+        numero_nomina: valueOf("input-nomina"),
+        edad: valueOf("input-edad"),
+        sexo: document.getElementById("select-sexo")?.value || "",
+        puesto: valueOf("input-puesto"),
+        area_laboral: valueOf("input-area-laboral"),
+        area_incidente: valueOf("input-area-incidente"),
+        zona_cuerpo: valueOf("input-zona"),
+        hemisferio: valueOf("input-hemisferio"),
+        diagnostico: valueOf("input-diagnostico"),
+        exploracion: valueOf("input-exploracion"),
+        motivo: valueOf("input-motivo"),
+        antecedentes: valueOf("input-antecedentes"),
+        clasificacion: valueOf("input-clasificacion"),
+        seguimiento: valueOf("input-seguimiento"),
+        indicaciones: valueOf("input-indicaciones"),
+      };
+    }
+
+    async function api(action, data){
+      const res = await fetch(`/api/gsheet?action=${encodeURIComponent(action)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data || {})
+      });
+      // Leemos una ÚNICA vez, evitando el error “body stream already read”
+      const text = await res.text();
+      try {
+        const j = JSON.parse(text);
+        return j;
+      } catch {
+        // Si no es JSON (GAS devolvió HTML), devolvemos error legible
+        return { ok:false, error: text.slice(0, 600) };
+      }
+    }
+
+    function alertMsg(msg){
+      // alert simple manteniendo tu UX actual
+      window.alert(msg);
+    }
+
+    // === Botón: Guardar en la nube ===
+    document.getElementById("btn-cloud").addEventListener("click", async () => {
+      const data = collectClinicaData();
+      const r = await api("clinica_cloud_save", { data });
+      if (r?.ok) {
+        alertMsg("Pendiente guardado: OK");
+        refreshCloud();
+      } else {
+        alertMsg("No se pudo guardar en la nube: " + (r?.error || "Error desconocido"));
+      }
+    });
+
+    // === Botón: Cerrar caso → hoja “Clínica” ===
+    document.getElementById("btn-close").addEventListener("click", async () => {
+      const data = collectClinicaData();
+      const r = await api("clinica_close", { data });
+      if (r?.ok) {
+        alertMsg("Caso cerrado y enviado a hoja 'Clínica': OK");
+      } else {
+        alertMsg("No se pudo cerrar el caso: " + (r?.error || "Error desconocido"));
+      }
+    });
+
+    // === Listar pendientes ===
+    async function refreshCloud(){
+      const holder = document.getElementById("cloud-list");
+      const msg = document.getElementById("cloud-msg");
+      holder.innerHTML = "";
+      msg.textContent = "Cargando…";
+      const r = await api("clinica_list_pending", {});
+      msg.textContent = "";
+
+      if (!r?.ok) {
+        msg.textContent = "No se pudo listar ( " + (r?.error || "Error") + " ).";
+        return;
+      }
+      const items = Array.isArray(r.items) ? r.items : [];
+      if (!items.length){
+        holder.innerHTML = `<div class="muted">No hay pendientes en la nube.</div>`;
+        return;
+      }
+      const frag = document.createDocumentFragment();
+      items.forEach((it) => {
+        const d = document.createElement("div");
+        d.className = "li";
+        d.innerHTML = `
+          <div class="row">
+            <strong>${(it.id || "").toString().slice(0,24) || "(sin id)"} </strong>
+            <span class="muted">· ${it.fecha_iso || ""}</span>
+          </div>
+          <div class="muted">${(it.nombre || "").toString().slice(0,120)}</div>
+        `;
+        frag.appendChild(d);
+      });
+      holder.appendChild(frag);
+    }
+    document.getElementById("btn-refresh").addEventListener("click", refreshCloud);
+
+    // Carga inicial “suave” (si GAS está caído, no rompe)
+    setTimeout(() => { refreshCloud().catch(()=>{}); }, 300);
+  </script>
 </body>
 </html>
