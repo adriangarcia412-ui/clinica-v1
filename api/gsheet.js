@@ -1,87 +1,63 @@
 // api/gsheet.js
 // Proxy único hacia Google Apps Script (GAS) para la app "clínica".
-// Requiere variable de entorno GAS_CLINICA_URL en Vercel con el URL .../exec
-// Si Vercel no tiene esa variable, puedes hardcodear temporalmente en GAS_URL.
-
-const GAS_URL = process.env.GAS_CLINICA_URL || ""; // <-- NO hardcodear aquí en producción
-
-// Acciones permitidas; evita que te llamen cualquier cosa.
-const ALLOWED = new Set([
-  "clinica_cloud_save",
-  "clinica_list_pending",
-  "clinica_close"
-]);
-
-/**
- * Convierte el ReadableStream en string una sola vez.
- */
-async function readTextOnce(res) {
-  try {
-    return await res.text();
-  } catch (e) {
-    return "";
-  }
-}
-
-/**
- * Respuesta JSON uniforme al front.
- */
-function sendJSON(res, status, body) {
-  res.status(status).setHeader("Content-Type", "application/json");
-  res.end(JSON.stringify(body));
-}
-
-/**
- * Extrae hasta 800 caracteres para diagnóstico si GAS devuelve HTML.
- */
-function excerpt(html) {
-  return (html || "").slice(0, 800);
-}
+// Prioriza la variable de entorno GAS_CLINICA_URL (Vercel -> Settings -> Environment Variables).
+// Si no existe, usa el fallback (puedes dejar el que ya tenías cuando funcionaba).
 
 export default async function handler(req, res) {
   try {
+    const action = (req.query?.action || '').toString().trim();
+
+    // 1) URL del Web App de GAS (debe ser el deployment que termina en /exec, publicado como "Anyone")
+    const GAS_URL =
+      process.env.GAS_CLINICA_URL ||
+      'https://script.google.com/macros/s/AKfycbzMzI3qsTIIMvIUAPGUk1JYt1CuPP3BIA4q9WK5Z1AslrgNg4PPD5aQEcSe07Ce43stkLQ/exec'; // <-- tu fallback conocido
+
     if (!GAS_URL) {
-      return sendJSON(res, 500, {
+      return res.status(500).json({
         ok: false,
-        error: "Falta GAS_CLINICA_URL en variables de entorno de Vercel. Configura con el URL /exec del Web App de Google."
+        error:
+          'Falta GAS_CLINICA_URL (variable de entorno en Vercel) con el URL /exec del Web App de Google.',
       });
     }
 
-    const { action } = req.query;
-    if (!action || !ALLOWED.has(action)) {
-      return sendJSON(res, 400, { ok: false, error: `Acción no permitida: ${action || "(vacía)"}` });
+    // 2) Solo permitimos acciones esperadas (coinciden con tu bridge)
+    const ALLOWED_ACTIONS = new Set([
+      'clinica_close',         // cerrar caso -> hoja "Clínica"
+      'clinica_cloud_save',    // guardar pendiente en nube temporal
+      'clinica_list_pending',  // listar pendientes
+    ]);
+    if (!ALLOWED_ACTIONS.has(action)) {
+      return res.status(400).json({ ok: false, error: `Acción no permitida: ${action}` });
     }
 
-    // El body del front será JSON.
-    const payload = req.method === "POST" ? req.body : null;
-
-    // Reenvía a GAS
-    const gasRes = await fetch(GAS_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, payload })
+    // 3) Reenvío al GAS (POST JSON)
+    const url = `${GAS_URL}?action=${encodeURIComponent(action)}`;
+    const upstream = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body || {}),
+      cache: 'no-store',
     });
 
-    const ct = (gasRes.headers.get("content-type") || "").toLowerCase();
-
-    // GAS debe devolver JSON. Si no, devolvemos diagnóstico con un recorte de HTML.
-    if (!ct.includes("application/json")) {
-      const raw = await readTextOnce(gasRes);
-      return sendJSON(res, 502, {
+    // 4) Si GAS devuelve HTML (error de Google), lo manejamos
+    const ct = (upstream.headers.get('content-type') || '').toLowerCase();
+    if (!ct.includes('application/json')) {
+      const html = await upstream.text();
+      return res.status(502).json({
         ok: false,
-        error: "GAS devolvió una página HTML (posible error de Google o del despliegue). Verifica que el Web App esté publicado como 'Anyone' y activo.",
-        html_excerpt: excerpt(raw)
+        error:
+          'GAS devolvió una página HTML (posible error de Google). Revisa que el Web App esté activo y publicado como "Anyone".',
+        html_excerpt: html.slice(0, 800),
       });
     }
 
-    // JSON válido desde GAS
-    const data = await gasRes.json();
-    return sendJSON(res, 200, data);
-
+    const data = await upstream.json();
+    return res.status(200).json(data);
   } catch (err) {
-    return sendJSON(res, 500, {
+    return res.status(500).json({
       ok: false,
-      error: `Proxy error: ${err?.message || err}`
+      error: `Error del proxy: ${(err && err.message) || err}`,
     });
   }
 }
+
