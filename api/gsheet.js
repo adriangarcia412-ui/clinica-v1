@@ -1,47 +1,68 @@
-// api/gsheet.js — Proxy a Google Apps Script (GAS) para la clínica (Edge).
-// Este archivo NO requiere variables de entorno. Usa una constante GAS_URL.
-// Pega aquí el URL de despliegue de tu Apps Script (el mismo que ya usas para “Cerrar caso”).
-export const config = { runtime: 'edge' };
+// api/gsheet.js — Proxy único hacia Google Apps Script (GAS) para la app "Clínica".
+// Inspirado en el proxy de SOC-V3. Si cambias el GAS, solo ajusta la URL de abajo
+// o bien configúrala como variable de entorno (Vercel → Settings → Environment Variables).
 
-// ⚠️ REEMPLAZA por tu Web App de GAS (URL /exec):
-const GAS_URL = 'https://script.google.com/macros/s/PEGAR_AQUI_TU_WEBAPP/exec';
+// 1) URL del Web App de Google Apps Script (publicado como "Anyone")
+//    PRIORIDAD: variable de entorno GAS_CLINICA_URL; si no existe, usa fallback.
+const GAS_URL =
+  process.env.GAS_CLINICA_URL ||
+  // Fallback temporal (puedes reemplazar por el de Clínica cuando lo tengas a mano)
+  "https://script.google.com/macros/s/AKfycbzMZl3qsIIIwIUAPGUk1JYt1CuPP3BI4Aq9WK5ZlAslrgNg4PPD5aQEcSe07Ce43stkLQ/exec";
 
-function json(obj, status = 200) {
-  return new Response(JSON.stringify(obj), {
+// 2) Mapa de acciones admitidas (según lo que dispara el front)
+const ALLOWED_ACTIONS = new Set([
+  "clinica_close",          // cerrar caso → hoja “Clínica”
+  "clinica_cloud_save",     // guardar en nube temporal
+  "clinica_list_pending",   // listar pendientes
+  "clinica_delete_pending"  // eliminar pendiente
+]);
+
+// 3) Utilidad para formatear respuesta de error
+function err(message, status = 400) {
+  return new Response(JSON.stringify({ ok: false, error: message }), {
     status,
-    headers: {
-      'content-type': 'application/json; charset=UTF-8',
-      'cache-control': 'no-store',
-      'access-control-allow-origin': '*',
-      'access-control-allow-methods': 'GET,POST,OPTIONS',
-      'access-control-allow-headers': 'content-type',
-    },
+    headers: { "Content-Type": "application/json" }
   });
 }
 
+// 4) Handler genérico: recibe { action, data } y reenvía a GAS.
 export default async function handler(req) {
-  if (req.method === 'OPTIONS') return json({ ok: true });
-
-  const { searchParams } = new URL(req.url);
-  if (req.method === 'GET' && searchParams.get('action') === 'ping') {
-    return json({ ok: true, message: 'pong (proxy activo)' });
-  }
-
-  if (!GAS_URL) return json({ ok:false, error:'Configura GAS_URL en api/gsheet.js' }, 500);
-
   try {
-    if (req.method === 'POST') {
-      const body = await req.json();
-      const res = await fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const j = await res.json().catch(()=>({ok:false,error:'Respuesta inválida de GAS'}));
-      return json(j, res.status);
+    if (req.method !== "POST") {
+      return err("Use POST", 405);
     }
-    return json({ ok:false, error:'Método no soportado' }, 405);
+
+    const body = await req.json().catch(() => ({}));
+    const action = body?.action;
+
+    if (!action) return err("Falta 'action'");
+    if (!ALLOWED_ACTIONS.has(action)) return err(`Acción desconocida: ${action}`);
+
+    // Reenvía a GAS con el mismo formato que usamos en SOC-V3:
+    // { action, payload: {...}, source: "clinica-v1" }
+    const gasResp = await fetch(GAS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action,
+        payload: body?.data || {},
+        source: "clinica-v1"
+      })
+    });
+
+    // GAS debe devolver JSON con { ok: true/false, ... }
+    if (!gasResp.ok) return err(`GAS HTTP ${gasResp.status}`, 502);
+
+    const j = await gasResp.json().catch(() => null);
+    if (!j || typeof j.ok === "undefined") {
+      return err("Respuesta inválida de GAS", 502);
+    }
+
+    return new Response(JSON.stringify(j), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
   } catch (e) {
-    return json({ ok:false, error: e?.message || 'Error proxy' }, 500);
+    return err(e?.message || "Fallo inesperado", 500);
   }
 }
